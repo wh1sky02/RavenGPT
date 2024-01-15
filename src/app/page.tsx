@@ -1,88 +1,33 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Settings, Bot, User, Menu, Sidebar, Moon, Sun, Plus, Edit3, Trash2, Upload, Search, Brain, X, FileText, Image as ImageIcon } from 'lucide-react';
+import { Send, Settings, Bot, Menu, Sidebar, Moon, Sun, Plus, Edit3, Trash2, Upload, Search, Brain, X, FileText, Image as ImageIcon } from 'lucide-react';
 import Link from 'next/link';
-import ReactMarkdown from 'react-markdown';
-import Image from 'next/image';
+import { Model, FeatureMode, PROVIDER_URLS, Message } from '@/lib/types';
+import { fetchOpenRouterModels, fetchGroqModels, fetchTogetherAIModels } from '@/lib/api';
+import { useChatSessions } from '@/hooks/useChatSessions';
+import { MessageBubble } from '@/components/MessageBubble';
 
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
-  timestamp: Date;
-  reasoning?: string;
-  citations?: Array<{
-    url: string;
-    title: string;
-    content?: string;
-  }>;
-  attachments?: Array<{
-    type: 'image' | 'document';
-    name: string;
-    url: string;
-    size: number;
-  }>;
-}
 
-interface ChatSession {
-  id: string;
-  title: string;
-  messages: Message[];
-  createdAt: Date;
-  updatedAt: Date;
-  featureMode: FeatureMode;
-  model: string;
-}
 
-interface OpenRouterModel {
-  id: string;
-  name: string;
-  description?: string;
-  pricing: {
-    prompt: string;
-    completion: string;
-  };
-  context_length: number;
-  supported_parameters?: string[];
-  architecture?: {
-    input_modalities?: string[];
-    output_modalities?: string[];
-  };
-}
 
-interface Model {
-  id: string;
-  name: string;
-  description?: string;
-  supportsReasoning?: boolean;
-  supportsImages?: boolean;
-  supportsWebSearch?: boolean;
-  isFree?: boolean;
-  pricing?: {
-    prompt: number;
-    completion: number;
-  };
-}
-
-// Simple Provider URLs - No complex architecture, just URL switching
-const PROVIDER_URLS = {
-  'OpenRouter': 'https://openrouter.ai/api/v1/chat/completions',
-  'Together AI': 'https://api.together.xyz/v1/chat/completions',
-  'Groq': 'https://api.groq.com/openai/v1/chat/completions',
-  'Custom API URL': '' // User can enter their own
-};
-
-type FeatureMode = 'standard' | 'reasoning' | 'web-search' | 'vision';
 
 export default function Home() {
   // Chat session management
-  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
-  const [currentChatId, setCurrentChatId] = useState<string>('');
+  const {
+    chatSessions,
+    currentChatId,
+    setCurrentChatId: setHookCurrentChatId,
+    createNewChat: createNewChatSession,
+    deleteChat: deleteChatSession,
+    renameChat: renameChatSession,
+    updateChatMessages,
+    isInitialized: isSessionsInitialized
+  } = useChatSessions();
+
   const [showSidebar, setShowSidebar] = useState(true);
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
-  const [isInitialized, setIsInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Current chat state
@@ -97,10 +42,10 @@ export default function Home() {
   const [selectedModel, setSelectedModel] = useState('');
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [, setModelsError] = useState<string | null>(null);
-  
+
   // Dark mode state
   const [isDarkMode, setIsDarkMode] = useState(false);
-  
+
   // New feature states
   const [featureMode, setFeatureMode] = useState<FeatureMode>('standard');
   const [showReasoning, setShowReasoning] = useState(true);
@@ -111,11 +56,11 @@ export default function Home() {
     url: string;
     size: number;
   }>>([]);
-  
+
   // Token settings
   const [userMaxTokens, setUserMaxTokens] = useState(500);
   const [useAdaptiveTokens, setUseAdaptiveTokens] = useState(true);
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialModelLoadRef = useRef<boolean>(false);
@@ -134,7 +79,7 @@ export default function Home() {
   const toggleDarkMode = useCallback(() => {
     const newDarkMode = !isDarkMode;
     setIsDarkMode(newDarkMode);
-    
+
     if (newDarkMode) {
       document.documentElement.classList.add('dark');
       localStorage.setItem('dark-mode', 'true');
@@ -155,29 +100,15 @@ export default function Home() {
   };
 
   const createNewChat = () => {
-    const newChatId = Date.now().toString();
-    const newChat: ChatSession = {
-      id: newChatId,
-      title: 'New Chat',
-      messages: [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      featureMode: featureMode,
-      model: selectedModel,
-    };
-    
-    const updatedSessions = [newChat, ...chatSessions];
-    setChatSessions(updatedSessions);
-    setCurrentChatId(newChatId);
+    createNewChatSession(featureMode, selectedModel);
     setMessages([]);
     setUploadedFiles([]);
-    saveChatSessions(updatedSessions);
   };
 
   const switchToChat = (chatId: string) => {
     const chat = chatSessions.find(c => c.id === chatId);
     if (chat) {
-      setCurrentChatId(chatId);
+      setHookCurrentChatId(chatId);
       setMessages(chat.messages);
       setFeatureMode(chat.featureMode);
       setSelectedModel(chat.model);
@@ -187,158 +118,65 @@ export default function Home() {
 
   const updateCurrentChat = useCallback((updatedMessages: Message[]) => {
     if (!currentChatId) return;
-    
-    setChatSessions(prevSessions => {
-      const updatedSessions = prevSessions.map(chat => {
-        if (chat.id === currentChatId) {
-          const title = updatedMessages.length > 0 && chat.title === 'New Chat' 
-            ? generateChatTitle(typeof updatedMessages[0].content === 'string' 
-                ? updatedMessages[0].content 
-                : 'Multimodal Message')
-            : chat.title;
-          
-          return {
-            ...chat,
-            title,
-            messages: updatedMessages,
-            updatedAt: new Date(),
-            featureMode,
-            model: selectedModel,
-          };
-        }
-        return chat;
-      });
-      
-      saveChatSessions(updatedSessions);
-      return updatedSessions;
+
+    updateChatMessages(currentChatId, updatedMessages, (currentTitle) => {
+      if (currentTitle === 'New Chat' && updatedMessages.length > 0) {
+        const firstContent = updatedMessages[0].content;
+        const contentString = typeof firstContent === 'string' ? firstContent : 'Multimodal Message';
+        return generateChatTitle(contentString);
+      }
+      return currentTitle;
     });
-  }, [currentChatId, featureMode, selectedModel]);
+  }, [currentChatId, updateChatMessages]);
 
   const deleteChat = (chatId: string) => {
-    const updatedSessions = chatSessions.filter(chat => chat.id !== chatId);
-    setChatSessions(updatedSessions);
-    
+    const remaining = chatSessions.filter(c => c.id !== chatId);
+    deleteChatSession(chatId);
+
     if (currentChatId === chatId) {
-      if (updatedSessions.length > 0) {
-        switchToChat(updatedSessions[0].id);
+      if (remaining.length > 0) {
+        switchToChat(remaining[0].id);
       } else {
-        // Don't create new chat automatically when deleting the last one
-        setCurrentChatId('');
+        setHookCurrentChatId('');
         setMessages([]);
         setUploadedFiles([]);
       }
     }
-    
-    saveChatSessions(updatedSessions);
   };
 
   const renameChat = (chatId: string, newTitle: string) => {
-    const updatedSessions = chatSessions.map(chat => 
-      chat.id === chatId ? { ...chat, title: newTitle, updatedAt: new Date() } : chat
-    );
-    setChatSessions(updatedSessions);
-    saveChatSessions(updatedSessions);
+    renameChatSession(chatId, newTitle);
     setEditingChatId(null);
     setEditingTitle('');
   };
 
-  const saveChatSessions = (sessions: ChatSession[]) => {
-    try {
-      const uniqueSessions = sessions.filter((session, index, self) => 
-        index === self.findIndex(s => s.id === session.id)
-      );
-      localStorage.setItem('ai-chatbot-sessions', JSON.stringify(uniqueSessions));
-    } catch (error) {
-      console.error('Error saving chat sessions:', error);
-    }
-  };
-
-  const createInitialChat = useCallback(() => {
-    const newChatId = Date.now().toString();
-    const newChat: ChatSession = {
-      id: newChatId,
-      title: 'New Chat',
-      messages: [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      featureMode: 'standard',
-      model: '',
-    };
-    setChatSessions([newChat]);
-    setCurrentChatId(newChatId);
-    setMessages([]);
-    saveChatSessions([newChat]);
-  }, []);
-
-  const cleanupDuplicateChats = useCallback(() => {
-    setChatSessions(prevSessions => {
-      const uniqueSessions = prevSessions.filter((session, index, self) => 
-        index === self.findIndex(s => s.id === session.id)
-      );
-      
-      if (uniqueSessions.length !== prevSessions.length) {
-        saveChatSessions(uniqueSessions);
-        console.log(`Cleaned up ${prevSessions.length - uniqueSessions.length} duplicate chats`);
+  // Sync state on initialization
+  useEffect(() => {
+    if (isSessionsInitialized && currentChatId) {
+      const chat = chatSessions.find(c => c.id === currentChatId);
+      // Only sync if local messages are empty but stored session has messages (restoration)
+      // or if we just initialized and need to set the initial state
+      if (chat && messages.length === 0 && chat.messages.length > 0) {
+        setMessages(chat.messages);
+        setFeatureMode(chat.featureMode);
+        setSelectedModel(chat.model);
+      } else if (chat && messages.length === 0 && chat.messages.length === 0) {
+        // Sync empty chat state (e.g. initial load of new chat)
+        setFeatureMode(chat.featureMode);
+        setSelectedModel(chat.model);
       }
-      
-      return uniqueSessions;
-    });
-  }, []);
-
-  const loadChatSessions = useCallback(() => {
-    if (isInitialized) return;
-    
-    try {
-      const saved = localStorage.getItem('ai-chatbot-sessions');
-      if (saved) {
-        const sessions: ChatSession[] = JSON.parse(saved).map((session: ChatSession & { 
-          createdAt: string; 
-          updatedAt: string; 
-          messages: Array<Message & { timestamp: string }> 
-        }) => ({
-          ...session,
-          createdAt: new Date(session.createdAt),
-          updatedAt: new Date(session.updatedAt),
-          messages: session.messages.map((msg: Message & { timestamp: string }) => ({
-            ...msg,
-            timestamp: new Date(msg.timestamp)
-          }))
-        }));
-        
-        const uniqueSessions = sessions.filter((session, index, self) => 
-          index === self.findIndex(s => s.id === session.id)
-        );
-        
-        setChatSessions(uniqueSessions);
-        
-        if (uniqueSessions.length > 0) {
-          setCurrentChatId(uniqueSessions[0].id);
-          setMessages(uniqueSessions[0].messages);
-          setFeatureMode(uniqueSessions[0].featureMode);
-          setSelectedModel(uniqueSessions[0].model);
-        } else {
-          createInitialChat();
-        }
-      } else {
-        createInitialChat();
-      }
-    } catch (error) {
-      console.error('Error loading chat sessions:', error);
-      createInitialChat();
     }
-    
-    setIsInitialized(true);
-  }, [createInitialChat]);
+  }, [isSessionsInitialized, currentChatId, chatSessions, messages.length]);
 
   const fetchAvailableModels = useCallback(async () => {
     setIsLoadingModels(true);
     setModelsError(null);
-    
+
     try {
       let models: Model[] = [];
-      
+
       console.log(`🔍 Fetching models for provider: ${selectedProviderName}`);
-      
+
       switch (selectedProviderName) {
         case 'OpenRouter':
           try {
@@ -351,7 +189,7 @@ export default function Home() {
           break;
         case 'Together AI':
           try {
-            models = await fetchTogetherAIModels();
+            models = await fetchTogetherAIModels(apiKey);
           } catch (error) {
             console.error('Together AI fetch failed:', error);
             setModelsError('Could not fetch Together AI models. Please check your internet connection.');
@@ -360,7 +198,7 @@ export default function Home() {
           break;
         case 'Groq':
           try {
-            models = await fetchGroqModels();
+            models = await fetchGroqModels(apiKey);
           } catch (error) {
             console.error('Groq fetch failed:', error);
             setModelsError('Could not fetch Groq models. Please check your API key and connection.');
@@ -373,20 +211,20 @@ export default function Home() {
         default:
           models = [];
       }
-      
+
       console.log(`📋 Available models for ${selectedProviderName}:`, models.map(m => m.id));
-      
+
       if (models.length > 0) {
         setAvailableModels(models);
-        
+
         // Always prioritize localStorage over potentially stale React state
         const savedModel = localStorage.getItem('selected-model');
-        
+
         setSelectedModel(currentSelectedModel => {
           // Always use saved model if available, regardless of current state
           const modelToValidate = savedModel || currentSelectedModel;
           const modelExists = models.find(m => m.id === modelToValidate);
-          
+
           console.log(`🔎 === MODEL VALIDATION ===`);
           console.log(`Provider: ${selectedProviderName}`);
           console.log(`Current state model: "${currentSelectedModel}"`);
@@ -395,18 +233,18 @@ export default function Home() {
           console.log(`Model exists in fetched models: ${!!modelExists}`);
           console.log(`Initial load completed: ${initialModelLoadRef.current}`);
           console.log(`Available model IDs:`, models.map(m => m.id));
-          
+
           // Mark initial load as complete
           if (!initialModelLoadRef.current) {
             initialModelLoadRef.current = true;
           }
-          
+
           // If saved model exists in the fetched models, use it
           if (savedModel && modelExists) {
             console.log(`✅ Using saved model "${savedModel}" (confirmed exists)`);
             return savedModel;
           }
-          
+
           // If saved model doesn't exist, or no saved model, use first available
           if (!modelExists || !savedModel) {
             const fallbackModel = models[0].id;
@@ -414,11 +252,11 @@ export default function Home() {
             localStorage.setItem('selected-model', fallbackModel);
             return fallbackModel;
           }
-          
+
           console.log(`✅ Model "${modelToValidate}" confirmed for ${selectedProviderName}`);
           return modelToValidate;
         });
-        
+
         console.log(`✅ Loaded ${models.length} models from ${selectedProviderName}`);
       } else {
         console.warn(`No models found for ${selectedProviderName}`);
@@ -435,321 +273,9 @@ export default function Home() {
     } finally {
       setIsLoadingModels(false);
     }
-  }, [selectedProviderName]);
+  }, [selectedProviderName, apiKey]);
 
-  // Fetch OpenRouter models (all models, not just free ones)
-  const fetchOpenRouterModels = async (): Promise<Model[]> => {
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/models');
-      if (!response.ok) throw new Error(`OpenRouter API error: ${response.status}`);
-      
-      const data = await response.json();
-      const models: OpenRouterModel[] = data.data;
-      
-      console.log(`Found ${models.length} models on OpenRouter`);
-      
-      return models.map(model => {
-        const promptPrice = parseFloat(model.pricing.prompt || '0');
-        const completionPrice = parseFloat(model.pricing.completion || '0');
-        const isFree = promptPrice === 0 && completionPrice === 0;
-        
-        return {
-          id: model.id,
-          name: `${model.name}${isFree ? ' (Free)' : ''}`,
-          description: `${model.description || 'AI model'} • Context: ${model.context_length.toLocaleString()}`,
-          supportsReasoning: model.id.includes('reasoning') || 
-                            model.id.includes('thinking') || 
-                            model.id.includes('r1') ||
-                            model.id.includes('qwq') ||
-                            model.id.includes('o1') ||
-                            model.id.includes('deepseek') ||
-                            model.supported_parameters?.includes('reasoning') ||
-                            false,
-          supportsImages: model.architecture?.input_modalities?.includes('image') || 
-                         model.id.includes('vision') ||
-                         model.id.includes('llava') ||
-                         model.id.includes('pixtral') ||
-                         false,
-          supportsWebSearch: true,
-          isFree,
-          pricing: {
-            prompt: promptPrice,
-            completion: completionPrice
-          }
-        };
-      });
-    } catch (error) {
-      console.error('OpenRouter API error:', error);
-      throw error;
-    }
-  };
 
-  // Fetch Groq models (dynamically filter all available models - they're all free)
-  const fetchGroqModels = async (): Promise<Model[]> => {
-    console.log('🔍 === FETCHING GROQ MODELS ===');
-    // Known free models available on Groq (all models are free with daily limits)
-    const knownFreeModels = [
-      {
-        id: 'llama-3.2-3b-preview',
-        name: 'Llama 3.2 3B Preview (Free)',
-        description: 'Lightning-fast inference • Context: 8K • 14,400 requests/day free',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: true,
-        pricing: { prompt: 0, completion: 0 }
-      },
-      {
-        id: 'llama-3.2-1b-preview',
-        name: 'Llama 3.2 1B Preview (Free)',
-        description: 'Ultra-fast lightweight • Context: 8K • 14,400 requests/day free',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: true,
-        pricing: { prompt: 0, completion: 0 }
-      },
-      {
-        id: 'llama3-8b-8192',
-        name: 'Llama 3 8B (Free)',
-        description: 'Powerful and fast • Context: 8K • 14,400 requests/day free',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: true,
-        pricing: { prompt: 0, completion: 0 }
-      },
-      {
-        id: 'llama3-70b-8192',
-        name: 'Llama 3 70B (Free)',
-        description: 'Most powerful model • Context: 8K • 14,400 requests/day free',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: true,
-        pricing: { prompt: 0, completion: 0 }
-      },
-      {
-        id: 'mixtral-8x7b-32768',
-        name: 'Mixtral 8x7B (Free)',
-        description: 'Mixture of experts • Context: 32K • 14,400 requests/day free',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: true,
-        pricing: { prompt: 0, completion: 0 }
-      }
-    ];
-
-    // If no API key, return known free models
-    if (!apiKey) {
-      console.log('🔑 No Groq API key provided, returning known free models');
-      console.log('🎯 Known free models:', knownFreeModels.map(m => m.id));
-      return knownFreeModels;
-    }
-
-    try {
-      const response = await fetch('https://api.groq.com/openai/v1/models', {
-        headers: { 'Authorization': `Bearer ${apiKey}` }
-      });
-      
-      if (!response.ok) {
-        if (response.status === 401) {
-          console.warn('Groq API key invalid, showing known free models');
-          return knownFreeModels;
-        }
-        throw new Error(`Groq API error: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      // All Groq models are free (up to daily limits), so return all available models
-      const models = data.data || [];
-      
-      console.log(`Found ${models.length} free models on Groq:`, models.map((m: { id: string }) => m.id));
-      
-      if (models.length === 0) {
-        console.warn('No models found via Groq API, using known free models');
-        return knownFreeModels;
-      }
-      
-      // Filter out non-chat models (TTS, transcription, etc.)
-      const chatModels = models.filter((model: { id: string }) => {
-        const modelId = model.id.toLowerCase();
-        // Exclude TTS, transcription, and specialized models
-        return !modelId.includes('tts') && 
-               !modelId.includes('whisper') && 
-               !modelId.includes('transcrib') && 
-               !modelId.includes('speech') && 
-               !modelId.includes('audio') &&
-               !modelId.includes('guard') &&
-               !modelId.includes('distil-whisper');
-      });
-
-      const mappedModels = chatModels.map((model: { id: string }) => {
-        const modelId = model.id;
-        const contextLength = modelId.includes('8192') ? '8K' : 
-                             modelId.includes('32768') ? '32K' : 
-                             modelId.includes('128k') ? '128K' : 'Unknown';
-        
-        return {
-          id: model.id,
-          name: `${model.id.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())} (Free)`,
-          description: `Lightning-fast inference • Context: ${contextLength} • 14,400 requests/day free`,
-          supportsReasoning: true,
-          supportsImages: model.id.includes('vision') || model.id.includes('llava'),
-          supportsWebSearch: false,
-          isFree: true,
-          pricing: { prompt: 0, completion: 0 }
-        };
-      });
-      
-      console.log('🔧 Groq API models fetched:', models.map((m: { id: string }) => m.id));
-      console.log('🔧 Groq models mapped:', mappedModels.map((m: Model) => `${m.id} -> ${m.name}`));
-      console.log('✅ === GROQ MODELS FETCH COMPLETE ===');
-      return mappedModels;
-    } catch (error) {
-      console.error('Groq API error:', error);
-      console.log('Falling back to known free models');
-      return knownFreeModels;
-    }
-  };
-
-  // Fetch Together AI models
-  const fetchTogetherAIModels = async (): Promise<Model[]> => {
-    // Known popular models available on Together AI
-    const knownModels = [
-      {
-        id: 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo',
-        name: 'Llama 3.1 70B Instruct Turbo',
-        description: 'Fast and capable Llama model • Context: 131K • $0.00088 per 1K tokens',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: false,
-        pricing: { prompt: 0.00088, completion: 0.00088 }
-      },
-      {
-        id: 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
-        name: 'Llama 3.1 8B Instruct Turbo',
-        description: 'Fast and efficient • Context: 131K • $0.00018 per 1K tokens',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: false,
-        pricing: { prompt: 0.00018, completion: 0.00018 }
-      },
-      {
-        id: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
-        name: 'Mixtral 8x7B Instruct',
-        description: 'Mixture of experts • Context: 32K • $0.0006 per 1K tokens',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: false,
-        pricing: { prompt: 0.0006, completion: 0.0006 }
-      },
-      {
-        id: 'Qwen/Qwen2.5-72B-Instruct-Turbo',
-        name: 'Qwen 2.5 72B Instruct Turbo',
-        description: 'High-performance model • Context: 32K • $0.0008 per 1K tokens',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: false,
-        pricing: { prompt: 0.0008, completion: 0.0008 }
-      },
-      {
-        id: 'meta-llama/Meta-Llama-3-8B-Instruct',
-        name: 'Llama 3 8B Instruct',
-        description: 'Reliable and efficient • Context: 8K • $0.0002 per 1K tokens',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: false,
-        pricing: { prompt: 0.0002, completion: 0.0002 }
-      },
-      {
-        id: 'deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free',
-        name: 'DeepSeek R1 Distill Llama 70B (Free)',
-        description: '⚠️ Strong reasoning but very strict rate limits (6 queries/minute) • Context: 8K • Free',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: true,
-        pricing: { prompt: 0, completion: 0 }
-      }
-    ];
-
-    // If no API key, return known models
-    if (!apiKey) {
-      console.log('No Together AI API key provided, showing known models');
-      return knownModels;
-    }
-
-    try {
-      const response = await fetch('https://api.together.xyz/v1/models', {
-        headers: { 'Authorization': `Bearer ${apiKey}` }
-      });
-      
-      if (!response.ok) {
-        if (response.status === 401) {
-          console.warn('Together AI API key invalid, showing known models');
-          return knownModels;
-        }
-        throw new Error(`Together AI API error: ${response.status}`);
-      }
-      
-      const models = await response.json();
-      
-      if (!models || models.length === 0) {
-        console.warn('No models found via Together AI API, using known models');
-        return knownModels;
-      }
-      
-      console.log(`Found ${models.length} models on Together AI`);
-      
-      return models.map((model: { 
-        id: string; 
-        display_name?: string; 
-        description?: string; 
-        context_length?: number; 
-        pricing?: { input?: number; output?: number }; 
-        type?: string; 
-        architecture?: string;
-      }) => {
-        // Determine if it's a free model (Together AI doesn't have completely free models, but some have very low pricing)
-        const inputPrice = model.pricing?.input || 0;
-        const outputPrice = model.pricing?.output || 0;
-        const isFree = inputPrice === 0 && outputPrice === 0;
-        
-        return {
-          id: model.id,
-          name: model.display_name || model.id.split('/').pop()?.replace(/[-_]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) || model.id,
-          description: `${model.description || 'Together AI model'} • Context: ${model.context_length?.toLocaleString() || 'Unknown'} ${model.pricing ? `• $${inputPrice}/$${outputPrice} per 1K tokens` : ''}`,
-          supportsReasoning: model.id.includes('instruct') || 
-                            model.id.includes('chat') || 
-                            model.id.includes('reasoning') ||
-                            model.id.includes('thinking') ||
-                            model.type === 'chat',
-          supportsImages: model.id.includes('vision') || 
-                         model.id.includes('llava') ||
-                         model.id.includes('pixtral') ||
-                         (model.architecture && model.architecture.includes('vision')),
-          supportsWebSearch: false,
-          isFree,
-          pricing: {
-            prompt: inputPrice,
-            completion: outputPrice
-          }
-        };
-      });
-    } catch (error) {
-      console.error('Together AI API error:', error);
-      console.log('Falling back to known models');
-      return knownModels;
-    }
-  };
 
   // Function to load settings from localStorage
   const loadSettings = useCallback(() => {
@@ -787,20 +313,20 @@ export default function Home() {
     if (savedMode) setFeatureMode(savedMode);
     if (savedMaxTokens) setUserMaxTokens(parseInt(savedMaxTokens));
     if (savedUseAdaptive !== null) setUseAdaptiveTokens(savedUseAdaptive === 'true');
-    
+
     console.log('✅ === SETTINGS LOADING COMPLETE ===');
   }, []);
 
   useEffect(() => {
     loadSettings();
-    loadChatSessions();
-  }, [loadSettings, loadChatSessions]);
+    loadSettings();
+  }, [loadSettings]);
 
   // Listen for localStorage changes (from settings page)
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       console.log(`📡 Storage change event:`, { key: e.key, oldValue: e.oldValue, newValue: e.newValue });
-      
+
       if (e.key === 'selected-model' && e.newValue) {
         console.log(`🔄 Storage change detected - Model changed to: ${e.newValue}`);
         setSelectedModel(e.newValue);
@@ -835,35 +361,35 @@ export default function Home() {
 
   // Fetch models when provider changes
   useEffect(() => {
-    if (isInitialized) {
+    if (isSessionsInitialized) {
       // Reset initial model load flag when provider changes
       initialModelLoadRef.current = false;
-      
+
       // Add a small delay to ensure localStorage is fully loaded first
       const timeoutId = setTimeout(() => {
         console.log(`🚀 Fetching models for ${selectedProviderName} after initialization`);
         fetchAvailableModels();
       }, 100);
-      
+
       return () => clearTimeout(timeoutId);
     }
-  }, [selectedProviderName, isInitialized, fetchAvailableModels]);
+  }, [selectedProviderName, isSessionsInitialized, fetchAvailableModels]);
 
   // Dark mode initialization - runs immediately on mount
   useEffect(() => {
     const savedDarkMode = localStorage.getItem('dark-mode');
     const systemPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
+
     let shouldUseDarkMode = false;
-    
+
     if (savedDarkMode !== null) {
       shouldUseDarkMode = savedDarkMode === 'true';
     } else {
       shouldUseDarkMode = systemPrefersDark;
     }
-    
+
     setIsDarkMode(shouldUseDarkMode);
-    
+
     if (shouldUseDarkMode) {
       document.documentElement.classList.add('dark');
     } else {
@@ -882,20 +408,18 @@ export default function Home() {
   }, [messages, currentChatId, updateCurrentChat]);
 
   useEffect(() => {
-    if (isInitialized) {
-      cleanupDuplicateChats();
-    }
-  }, [isInitialized, cleanupDuplicateChats]);
+    // Cleanup duplicates handled by hook
+  }, [isSessionsInitialized]);
 
   const setMode = (mode: FeatureMode) => {
     setFeatureMode(mode);
     localStorage.setItem('feature-mode', mode);
-    
+
     // When switching to reasoning mode, ensure showReasoning is enabled by default
     if (mode === 'reasoning') {
       setShowReasoning(true);
     }
-    
+
     const filteredModels = getFilteredModels(mode);
     if (filteredModels.length > 0 && !filteredModels.find(m => m.id === selectedModel)) {
       if (mode === 'web-search') {
@@ -933,7 +457,7 @@ export default function Home() {
 
     for (const file of Array.from(files)) {
       const isImage = file.type.startsWith('image/');
-      
+
       if (isImage) {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -970,12 +494,12 @@ export default function Home() {
     if (!input.trim() || !apiKey) return;
 
     if (!currentChatId) {
-      createNewChat();
-      return;
+      const newChatId = createNewChatSession(featureMode, selectedModel);
+      setHookCurrentChatId(newChatId);
     }
 
     let messageContent: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
-    
+
     if (uploadedFiles.length > 0 && uploadedFiles.some(f => f.type === 'image')) {
       messageContent = [
         { type: 'text', text: input.trim() },
@@ -985,13 +509,13 @@ export default function Home() {
       ];
     } else {
       let textContent = input.trim();
-      
+
       uploadedFiles.forEach(file => {
         if (file.type === 'document') {
           textContent += `\n\n[Attached document: ${file.name}]\n${file.url}`;
         }
       });
-      
+
       messageContent = textContent;
     }
 
@@ -1015,7 +539,7 @@ export default function Home() {
 
     try {
       const model = selectedModel;
-      
+
       // Calculate input tokens (rough estimation: 1 token ≈ 4 characters)
       const allMessagesForTokens = [
         ...messages.map(msg => ({
@@ -1029,10 +553,10 @@ export default function Home() {
       ];
       const inputText = allMessagesForTokens.map(msg => `${msg.role}: ${msg.content}`).join('\n');
       const estimatedInputTokens = Math.ceil(inputText.length / 4);
-      
+
       // Determine max_tokens based on user settings and model limits
       let maxTokens = userMaxTokens; // Start with user preference
-      
+
       // If adaptive tokens is enabled, adjust based on model and context
       if (useAdaptiveTokens) {
         // Model-specific context limits
@@ -1063,14 +587,14 @@ export default function Home() {
             maxTokens = Math.max(300, Math.min(userMaxTokens, 1500 - estimatedInputTokens));
           }
         }
-        
+
         // Ensure we don't exceed reasonable limits or go below minimum
         maxTokens = Math.min(Math.max(maxTokens, 150), Math.min(userMaxTokens, 4000));
       } else {
         // Fixed tokens mode - use user setting but respect model minimums
         maxTokens = Math.max(150, userMaxTokens);
       }
-      
+
       console.log(`📊 Token allocation - Input: ~${estimatedInputTokens}, Max output: ${maxTokens}, Model: ${model}`);
 
       const requestBody: Record<string, unknown> = {
@@ -1107,7 +631,7 @@ export default function Home() {
             id: 'web',
             max_results: 5
           }];
-          
+
           if (!model.includes(':online')) {
             requestBody.model = `${model}:online`;
           }
@@ -1117,7 +641,7 @@ export default function Home() {
             role: 'system',
             content: 'You are a helpful AI assistant. When users ask questions that would benefit from current information, please let them know that you don\'t have access to real-time web search and suggest they verify current information from reliable sources.'
           };
-          
+
           requestBody.messages = [
             systemMessage,
             ...(requestBody.messages as Array<{ role: string; content: unknown }>)
@@ -1158,7 +682,7 @@ export default function Home() {
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      
+
       let accumulatedReasoning = '';
       let accumulatedContent = '';
       let citations: Array<{ url: string; title: string; content?: string }> = [];
@@ -1189,7 +713,7 @@ export default function Home() {
 
                     if (delta.content) {
                       accumulatedContent += delta.content;
-                      
+
                       // Create the assistant message only when first content arrives
                       if (!hasCreatedAssistantMessage) {
                         const initialAssistantMessage: Message = {
@@ -1204,8 +728,8 @@ export default function Home() {
                         hasCreatedAssistantMessage = true;
                       } else {
                         // Update existing message
-                        setMessages(prev => prev.map(msg => 
-                          msg.id === assistantMessageId 
+                        setMessages(prev => prev.map(msg =>
+                          msg.id === assistantMessageId
                             ? { ...msg, content: accumulatedContent }
                             : msg
                         ));
@@ -1221,9 +745,9 @@ export default function Home() {
                           title: ann.url_citation.title,
                           content: ann.url_citation.content
                         }));
-                      
-                      setMessages(prev => prev.map(msg => 
-                        msg.id === assistantMessageId 
+
+                      setMessages(prev => prev.map(msg =>
+                        msg.id === assistantMessageId
                           ? { ...msg, citations: citations.length > 0 ? citations : undefined }
                           : msg
                       ));
@@ -1242,9 +766,9 @@ export default function Home() {
 
     } catch (error) {
       console.error('Error sending message:', error);
-      
+
       let errorMessage = 'Sorry, I encountered an error while processing your request.';
-      
+
       if (error instanceof Error) {
         if (error.message.includes('401') || error.message.includes('Unauthorized')) {
           errorMessage = '❌ Invalid API key. Please check your API key in settings.';
@@ -1273,7 +797,7 @@ export default function Home() {
           errorMessage = `❌ Error: ${error.message}`;
         }
       }
-      
+
       // Create assistant message if it doesn't exist yet (error before any content)
       if (!hasCreatedAssistantMessage) {
         const errorAssistantMessage: Message = {
@@ -1287,13 +811,13 @@ export default function Home() {
         setMessages(prev => [...prev, errorAssistantMessage]);
       } else {
         // Update existing message with error
-        setMessages(prev => prev.map(msg => 
-          msg.id === assistantMessageId 
-            ? { 
-                ...msg, 
-                content: errorMessage,
-                reasoning: undefined
-              }
+        setMessages(prev => prev.map(msg =>
+          msg.id === assistantMessageId
+            ? {
+              ...msg,
+              content: errorMessage,
+              reasoning: undefined
+            }
             : msg
         ));
       }
@@ -1308,21 +832,21 @@ export default function Home() {
   // Filter chat sessions based on search query
   const filteredChatSessions = chatSessions.filter(chat => {
     if (!searchQuery.trim()) return true;
-    
+
     const query = searchQuery.toLowerCase().trim();
-    
+
     // Search in chat title
     if (chat.title.toLowerCase().includes(query)) {
       return true;
     }
-    
+
     // Search in all messages
     return chat.messages.some(msg => {
       // Handle string content
       if (typeof msg.content === 'string') {
         return msg.content.toLowerCase().includes(query);
       }
-      
+
       // Handle array content (multimodal messages)
       if (Array.isArray(msg.content)) {
         return msg.content.some(item => {
@@ -1332,20 +856,20 @@ export default function Home() {
           return false;
         });
       }
-      
+
       // Search in reasoning if available
       if (msg.reasoning && msg.reasoning.toLowerCase().includes(query)) {
         return true;
       }
-      
+
       // Search in citations if available
       if (msg.citations) {
-        return msg.citations.some(citation => 
+        return msg.citations.some(citation =>
           citation.title.toLowerCase().includes(query) ||
           (citation.content && citation.content.toLowerCase().includes(query))
         );
       }
-      
+
       return false;
     });
   });
@@ -1367,7 +891,7 @@ export default function Home() {
               className="w-full pl-10 pr-3 py-2 text-sm bg-white dark:bg-dark-900 border border-gray-300 dark:border-dark-800 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-dark-100 placeholder-gray-500 dark:placeholder-dark-400"
             />
           </div>
-          
+
           {/* New Chat Button */}
           <button
             onClick={createNewChat}
@@ -1403,11 +927,10 @@ export default function Home() {
             filteredChatSessions.map((chat) => (
               <div
                 key={chat.id}
-                className={`group relative p-3 rounded-md cursor-pointer transition-colors mb-1 ${
-                  currentChatId === chat.id
-                    ? 'bg-gray-200 dark:bg-dark-850'
-                    : 'hover:bg-gray-100 dark:hover:bg-dark-900'
-                }`}
+                className={`group relative p-3 rounded-md cursor-pointer transition-colors mb-1 ${currentChatId === chat.id
+                  ? 'bg-gray-200 dark:bg-dark-850'
+                  : 'hover:bg-gray-100 dark:hover:bg-dark-900'
+                  }`}
                 onClick={() => switchToChat(chat.id)}
               >
                 {editingChatId === chat.id ? (
@@ -1433,7 +956,7 @@ export default function Home() {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm text-gray-900 dark:text-dark-100 truncate">{chat.title}</div>
                     </div>
-                    
+
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={(e) => {
@@ -1473,12 +996,12 @@ export default function Home() {
             >
               {showSidebar ? <Sidebar className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
-            
+
             <h1 className="text-lg font-semibold text-gray-900 dark:text-dark-100">
               RavenGPT
             </h1>
           </div>
-          
+
           <div className="flex items-center gap-2">
             {/* Current Model Display */}
             <div className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-50 dark:bg-dark-900 border border-gray-300 dark:border-dark-800 rounded-md">
@@ -1492,14 +1015,14 @@ export default function Home() {
                   (() => {
                     const currentModel = filteredModels.find(m => m.id === selectedModel);
                     console.log(`🎯 Displaying model - Selected: "${selectedModel}", Found: ${!!currentModel}, Available models:`, filteredModels.map(m => m.id));
-                    return currentModel 
+                    return currentModel
                       ? currentModel.name.replace(' (Free)', '').replace('Llama', 'llama').replace('Instruct', '').trim()
                       : selectedModel ? `Model not found (${selectedModel})` : 'No model selected';
                   })()
                 )}
               </span>
             </div>
-            
+
             {/* Dark Mode Toggle */}
             <button
               onClick={toggleDarkMode}
@@ -1508,7 +1031,7 @@ export default function Home() {
             >
               {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
-            
+
             <Link
               href="/settings"
               className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-dark-800 text-gray-600 dark:text-dark-300"
@@ -1531,28 +1054,26 @@ export default function Home() {
                 <button
                   key={mode}
                   onClick={() => setMode(mode)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors font-medium ${
-                    featureMode === mode
-                      ? 'bg-gray-200 text-gray-900 dark:bg-dark-800 dark:text-dark-100'
-                      : 'text-gray-600 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-800'
-                  }`}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors font-medium ${featureMode === mode
+                    ? 'bg-gray-200 text-gray-900 dark:bg-dark-800 dark:text-dark-100'
+                    : 'text-gray-600 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-800'
+                    }`}
                 >
                   <Icon className="w-4 h-4" />
                   {label}
                 </button>
               ))}
             </div>
-            
+
             {/* Reasoning Controls */}
             {featureMode === 'reasoning' && (
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setShowReasoning(!showReasoning)}
-                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
-                    showReasoning
-                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
-                      : 'bg-gray-200 text-gray-600 dark:bg-dark-800 dark:text-dark-400'
-                  }`}
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${showReasoning
+                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+                    : 'bg-gray-200 text-gray-600 dark:bg-dark-800 dark:text-dark-400'
+                    }`}
                 >
                   <Brain className="w-3 h-3" />
                   {showReasoning ? 'Hide Thinking' : 'Show Thinking'}
@@ -1595,15 +1116,8 @@ export default function Home() {
                       Welcome to RavenGPT
                     </h2>
                     <p className="text-lg text-gray-500 dark:text-dark-400 mb-6">
-                      Start a new conversation or select an existing chat from the sidebar.
+                      Start typing below to begin a new conversation.
                     </p>
-                    <button
-                      onClick={createNewChat}
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 dark:bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-blue-700 transition-all duration-200 font-medium transform hover:scale-105 shadow-lg hover:shadow-xl"
-                    >
-                      <Plus className="w-5 h-5" />
-                      Start New Chat
-                    </button>
                   </>
                 ) : (
                   <>
@@ -1623,125 +1137,17 @@ export default function Home() {
           ) : (
             <div>
               {messages.map((message, index) => (
-                <div key={message.id} className={`border-b border-gray-200 dark:border-dark-800 ${
-                  message.role === 'assistant' ? 'bg-gray-50 dark:bg-dark-925' : ''
-                }`}>
-                  <div className="max-w-3xl mx-auto px-4 py-6">
-                    <div className="flex gap-4">
-                      {/* Avatar */}
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        message.role === 'user' 
-                          ? 'bg-gray-600' 
-                          : 'bg-green-600'
-                      }`}>
-                        {message.role === 'user' ? (
-                          <User className="w-5 h-5 text-white" />
-                        ) : (
-                          <Bot className="w-5 h-5 text-white" />
-                        )}
-                      </div>
-                      
-                      {/* Message Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-gray-900 dark:text-dark-100 text-sm mb-2">
-                          {message.role === 'user' ? 'You' : 'RavenGPT'}
-                        </div>
-                        
-                        {message.role === 'assistant' ? (
-                          <div className="prose prose-gray dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:bg-gray-800 prose-pre:text-gray-100">
-                            <ReactMarkdown>
-                              {(() => {
-                                let content = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
-                                
-                                // Remove thinking tags and their content if reasoning is disabled
-                                if (!showReasoning || featureMode !== 'reasoning') {
-                                  content = content
-                                    .replace(/<think>[\s\S]*?<\/think>/g, '')
-                                    .replace(/<thinking>[\s\S]*?<\/thinking>/g, '')
-                                    .replace(/\[REASONING\][\s\S]*?\[\/REASONING\]/g, '')
-                                    .trim();
-                                }
-                                
-                                // If reasoning is enabled, convert thinking tags to a proper reasoning display
-                                if (showReasoning && featureMode === 'reasoning') {
-                                  content = content
-                                    .replace(/<think>([\s\S]*?)<\/think>/g, (match, thinkContent) => {
-                                      return `**🧠 Thinking:**\n\n${thinkContent.trim()}\n\n**Response:**\n\n`;
-                                    })
-                                    .replace(/<thinking>([\s\S]*?)<\/thinking>/g, (match, thinkContent) => {
-                                      return `**🧠 Thinking:**\n\n${thinkContent.trim()}\n\n**Response:**\n\n`;
-                                    })
-                                    .replace(/\[REASONING\]([\s\S]*?)\[\/REASONING\]/g, (match, thinkContent) => {
-                                      return `**🧠 Reasoning:**\n\n${thinkContent.trim()}\n\n**Response:**\n\n`;
-                                    });
-                                }
-                                
-                                return content;
-                              })()}
-                            </ReactMarkdown>
-                            {isLoading && index === messages.length - 1 && (
-                              <span className="inline-block w-2 h-4 bg-gray-400 ml-1 animate-pulse"></span>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-gray-900 dark:text-dark-100">
-                            {typeof message.content === 'string' ? (
-                              <div className="whitespace-pre-wrap">{message.content}</div>
-                            ) : (
-                              <div className="space-y-3">
-                                {Array.isArray(message.content) && message.content.map((part, index) => (
-                                  <div key={index}>
-                                    {part.type === 'text' && (
-                                      <div className="whitespace-pre-wrap">{part.text}</div>
-                                    )}
-                                    {part.type === 'image_url' && part.image_url?.url && (
-                                      <Image
-                                        src={part.image_url.url} 
-                                        alt="Uploaded image" 
-                                        width={400}
-                                        height={300}
-                                        className="rounded-lg border border-gray-200 dark:border-dark-800"
-                                        unoptimized
-                                      />
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Citations */}
-                        {message.citations && message.citations.length > 0 && (
-                          <div className="mt-4 pt-3 border-t border-gray-200 dark:border-dark-800">
-                            <div className="text-xs font-medium text-gray-600 dark:text-dark-400 mb-2">Sources:</div>
-                            <div className="space-y-1">
-                              {message.citations.map((citation, index) => (
-                                <div key={index}>
-                                  <a 
-                                    href={citation.url} 
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
-                                  >
-                                    {citation.title}
-                                  </a>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        
-                        <div className="text-xs text-gray-500 dark:text-dark-400 mt-3">
-                          {message.timestamp.toLocaleTimeString()}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <MessageBubble
+                  key={message.id}
+                  message={message}
+                  featureMode={featureMode}
+                  showReasoning={showReasoning}
+                  isLoading={isLoading}
+                  isLast={index === messages.length - 1}
+                />
               ))}
-              
-              {isLoading && (
+
+              {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
                 <div className="border-b border-gray-200 dark:border-dark-800 bg-gray-50 dark:bg-dark-925">
                   <div className="max-w-3xl mx-auto px-4 py-6">
                     <div className="flex gap-4">
@@ -1813,7 +1219,7 @@ export default function Home() {
                     }}
                   />
                 </div>
-                
+
                 <div className="flex items-end p-2 gap-2">
                   {(featureMode === 'vision' || featureMode === 'standard') && (
                     <button
@@ -1824,7 +1230,7 @@ export default function Home() {
                       <Upload className="w-5 h-5" />
                     </button>
                   )}
-                  
+
                   <button
                     onClick={sendMessage}
                     disabled={!input.trim() || !apiKey || isLoading}

@@ -3,44 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, Key, Sparkles, Brain, Search, Image as ImageIcon, Check, RefreshCw, ExternalLink, Filter, Grid, List, X, Settings, Bot } from 'lucide-react';
 import Link from 'next/link';
+import { Model, PROVIDER_URLS } from '@/lib/types';
+import { fetchOpenRouterModels, fetchGroqModels, fetchTogetherAIModels } from '@/lib/api';
 
-interface OpenRouterModel {
-  id: string;
-  name: string;
-  description?: string;
-  pricing: {
-    prompt: string;
-    completion: string;
-  };
-  context_length: number;
-  supported_parameters?: string[];
-  architecture?: {
-    input_modalities?: string[];
-    output_modalities?: string[];
-  };
-}
 
-interface Model {
-  id: string;
-  name: string;
-  description?: string;
-  supportsReasoning?: boolean;
-  supportsImages?: boolean;
-  supportsWebSearch?: boolean;
-  isFree?: boolean;
-  pricing?: {
-    prompt: number;
-    completion: number;
-  };
-}
-
-// Provider URLs
-const PROVIDER_URLS = {
-  'OpenRouter': 'https://openrouter.ai/api/v1/chat/completions',
-  'Together AI': 'https://api.together.xyz/v1/chat/completions',
-  'Groq': 'https://api.groq.com/openai/v1/chat/completions',
-  'Custom API URL': ''
-};
 
 
 
@@ -55,7 +21,7 @@ export default function SettingsPage() {
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  
+
   // Temporary state variables for settings (don't affect until save is clicked)
   const [tempApiKey, setTempApiKey] = useState('');
   const [tempSelectedProviderName, setTempSelectedProviderName] = useState('OpenRouter');
@@ -63,15 +29,15 @@ export default function SettingsPage() {
   const [tempCustomApiUrl, setTempCustomApiUrl] = useState('');
   const [tempMaxTokens, setTempMaxTokens] = useState(500);
   const [tempUseAdaptiveTokens, setTempUseAdaptiveTokens] = useState(true);
-  
+
   // Model filtering states
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
-  
+
   // Tab state
   const [activeTab, setActiveTab] = useState<'provider' | 'models' | 'tokens' | 'about'>('provider');
-  
+
   // Token settings
   const [maxTokens, setMaxTokens] = useState(500);
   const [useAdaptiveTokens, setUseAdaptiveTokens] = useState(true);
@@ -80,15 +46,15 @@ export default function SettingsPage() {
   useEffect(() => {
     const savedDarkMode = localStorage.getItem('dark-mode');
     const systemPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
+
     let shouldUseDarkMode = false;
-    
+
     if (savedDarkMode !== null) {
       shouldUseDarkMode = savedDarkMode === 'true';
     } else {
       shouldUseDarkMode = systemPrefersDark;
     }
-    
+
     if (shouldUseDarkMode) {
       document.documentElement.classList.add('dark');
     } else {
@@ -105,307 +71,17 @@ export default function SettingsPage() {
     // Don't save to localStorage immediately - only save when user clicks Save Settings
   };
 
-  // Fetch OpenRouter models
-  const fetchOpenRouterModels = async (): Promise<Model[]> => {
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/models');
-      if (!response.ok) throw new Error(`OpenRouter API error: ${response.status}`);
-      
-      const data = await response.json();
-      const models: OpenRouterModel[] = data.data;
-      
-      return models.map(model => {
-        const promptPrice = parseFloat(model.pricing.prompt || '0');
-        const completionPrice = parseFloat(model.pricing.completion || '0');
-        const isFree = promptPrice === 0 && completionPrice === 0;
-        
-        return {
-          id: model.id,
-          name: `${model.name}${isFree ? ' (Free)' : ''}`,
-          description: `${model.description || 'AI model'} • Context: ${model.context_length.toLocaleString()}`,
-          supportsReasoning: model.id.includes('reasoning') || 
-                            model.id.includes('thinking') || 
-                            model.id.includes('r1') ||
-                            model.id.includes('qwq') ||
-                            model.id.includes('o1') ||
-                            model.id.includes('deepseek') ||
-                            false,
-          supportsImages: model.architecture?.input_modalities?.includes('image') || 
-                         model.id.includes('vision') ||
-                         model.id.includes('llava') ||
-                         model.id.includes('pixtral') ||
-                         false,
-          supportsWebSearch: true,
-          isFree,
-          pricing: {
-            prompt: promptPrice,
-            completion: completionPrice
-          }
-        };
-      });
-    } catch (error) {
-      console.error('OpenRouter API error:', error);
-      throw error;
-    }
-  };
+  // Fetch OpenRouter models: imported from api.ts
 
-  // Fetch Groq models
-  const fetchGroqModels = async (): Promise<Model[]> => {
-    const knownFreeModels = [
-      {
-        id: 'llama-3.2-3b-preview',
-        name: 'Llama 3.2 3B Preview (Free)',
-        description: 'Lightning-fast inference • Context: 8K • 14,400 requests/day free',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: true,
-        pricing: { prompt: 0, completion: 0 }
-      },
-      {
-        id: 'llama-3.2-1b-preview',
-        name: 'Llama 3.2 1B Preview (Free)',
-        description: 'Ultra-fast lightweight • Context: 8K • 14,400 requests/day free',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: true,
-        pricing: { prompt: 0, completion: 0 }
-      },
-      {
-        id: 'llama3-8b-8192',
-        name: 'Llama 3 8B (Free)',
-        description: 'Powerful and fast • Context: 8K • 14,400 requests/day free',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: true,
-        pricing: { prompt: 0, completion: 0 }
-      },
-      {
-        id: 'llama3-70b-8192',
-        name: 'Llama 3 70B (Free)',
-        description: 'Most powerful model • Context: 8K • 14,400 requests/day free',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: true,
-        pricing: { prompt: 0, completion: 0 }
-      },
-      {
-        id: 'mixtral-8x7b-32768',
-        name: 'Mixtral 8x7B (Free)',
-        description: 'Mixture of experts • Context: 32K • 14,400 requests/day free',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: true,
-        pricing: { prompt: 0, completion: 0 }
-      }
-    ];
 
-    if (!apiKey) {
-      return knownFreeModels;
-    }
-
-    try {
-      const response = await fetch('https://api.groq.com/openai/v1/models', {
-        headers: { 'Authorization': `Bearer ${apiKey}` }
-      });
-      
-      if (!response.ok) {
-        if (response.status === 401) {
-          return knownFreeModels;
-        }
-        throw new Error(`Groq API error: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      const models = data.data || [];
-      
-      if (models.length === 0) {
-        return knownFreeModels;
-      }
-      
-      // Filter out non-chat models (TTS, transcription, etc.)
-      const chatModels = models.filter((model: { id: string }) => {
-        const modelId = model.id.toLowerCase();
-        // Exclude TTS, transcription, and specialized models
-        return !modelId.includes('tts') && 
-               !modelId.includes('whisper') && 
-               !modelId.includes('transcrib') && 
-               !modelId.includes('speech') && 
-               !modelId.includes('audio') &&
-               !modelId.includes('guard') &&
-               !modelId.includes('distil-whisper');
-      });
-
-      return chatModels.map((model: { id: string }) => {
-        const modelId = model.id;
-        const contextLength = modelId.includes('8192') ? '8K' : 
-                             modelId.includes('32768') ? '32K' : 
-                             modelId.includes('128k') ? '128K' : 'Unknown';
-        
-        return {
-          id: model.id,
-          name: `${model.id.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())} (Free)`,
-          description: `Lightning-fast inference • Context: ${contextLength} • 14,400 requests/day free`,
-          supportsReasoning: true,
-          supportsImages: model.id.includes('vision') || model.id.includes('llava'),
-          supportsWebSearch: false,
-          isFree: true,
-          pricing: { prompt: 0, completion: 0 }
-        };
-      });
-    } catch (error) {
-      console.error('Groq API error:', error);
-      return knownFreeModels;
-    }
-  };
-
-  // Fetch Together AI models
-  const fetchTogetherAIModels = async (): Promise<Model[]> => {
-    // Known popular models available on Together AI
-    const knownModels = [
-      {
-        id: 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo',
-        name: 'Llama 3.1 70B Instruct Turbo',
-        description: 'Fast and capable Llama model • Context: 131K • $0.00088 per 1K tokens',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: false,
-        pricing: { prompt: 0.00088, completion: 0.00088 }
-      },
-      {
-        id: 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
-        name: 'Llama 3.1 8B Instruct Turbo',
-        description: 'Fast and efficient • Context: 131K • $0.00018 per 1K tokens',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: false,
-        pricing: { prompt: 0.00018, completion: 0.00018 }
-      },
-      {
-        id: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
-        name: 'Mixtral 8x7B Instruct',
-        description: 'Mixture of experts • Context: 32K • $0.0006 per 1K tokens',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: false,
-        pricing: { prompt: 0.0006, completion: 0.0006 }
-      },
-      {
-        id: 'Qwen/Qwen2.5-72B-Instruct-Turbo',
-        name: 'Qwen 2.5 72B Instruct Turbo',
-        description: 'High-performance model • Context: 32K • $0.0008 per 1K tokens',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: false,
-        pricing: { prompt: 0.0008, completion: 0.0008 }
-      },
-      {
-        id: 'meta-llama/Meta-Llama-3-8B-Instruct',
-        name: 'Llama 3 8B Instruct',
-        description: 'Reliable and efficient • Context: 8K • $0.0002 per 1K tokens',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: false,
-        pricing: { prompt: 0.0002, completion: 0.0002 }
-      },
-      {
-        id: 'deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free',
-        name: 'DeepSeek R1 Distill Llama 70B (Free)',
-        description: '⚠️ Strong reasoning but very strict rate limits (6 queries/minute) • Context: 8K • Free',
-        supportsReasoning: true,
-        supportsImages: false,
-        supportsWebSearch: false,
-        isFree: true,
-        pricing: { prompt: 0, completion: 0 }
-      }
-    ];
-
-    // If no API key, return known models
-    if (!apiKey) {
-      console.log('No Together AI API key provided, showing known models');
-      return knownModels;
-    }
-
-    try {
-      const response = await fetch('https://api.together.xyz/v1/models', {
-        headers: { 'Authorization': `Bearer ${apiKey}` }
-      });
-      
-      if (!response.ok) {
-        if (response.status === 401) {
-          console.warn('Together AI API key invalid, showing known models');
-          return knownModels;
-        }
-        throw new Error(`Together AI API error: ${response.status}`);
-      }
-      
-      const models = await response.json();
-      
-      if (!models || models.length === 0) {
-        console.warn('No models found via Together AI API, using known models');
-        return knownModels;
-      }
-      
-      console.log(`Found ${models.length} models on Together AI`);
-      
-      return models.map((model: { 
-        id: string; 
-        display_name?: string; 
-        description?: string; 
-        context_length?: number; 
-        pricing?: { input?: number; output?: number }; 
-        type?: string; 
-        architecture?: string;
-      }) => {
-        // Determine if it's a free model (Together AI doesn't have completely free models, but some have very low pricing)
-        const inputPrice = model.pricing?.input || 0;
-        const outputPrice = model.pricing?.output || 0;
-        const isFree = inputPrice === 0 && outputPrice === 0;
-        
-        return {
-          id: model.id,
-          name: model.display_name || model.id.split('/').pop()?.replace(/[-_]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) || model.id,
-          description: `${model.description || 'Together AI model'} • Context: ${model.context_length?.toLocaleString() || 'Unknown'} ${model.pricing ? `• $${inputPrice}/$${outputPrice} per 1K tokens` : ''}`,
-          supportsReasoning: model.id.includes('instruct') || 
-                            model.id.includes('chat') || 
-                            model.id.includes('reasoning') ||
-                            model.id.includes('thinking') ||
-                            model.type === 'chat',
-          supportsImages: model.id.includes('vision') || 
-                         model.id.includes('llava') ||
-                         model.id.includes('pixtral') ||
-                         (model.architecture && model.architecture.includes('vision')),
-          supportsWebSearch: false,
-          isFree,
-          pricing: {
-            prompt: inputPrice,
-            completion: outputPrice
-          }
-        };
-      });
-    } catch (error) {
-      console.error('Together AI API error:', error);
-      console.log('Falling back to known models');
-      return knownModels;
-    }
-  };
 
   const fetchAvailableModels = useCallback(async () => {
     setIsLoadingModels(true);
     setModelsError(null);
-    
+
     try {
       let models: Model[] = [];
-      
+
       switch (tempSelectedProviderName) {
         case 'OpenRouter':
           try {
@@ -417,7 +93,7 @@ export default function SettingsPage() {
           break;
         case 'Together AI':
           try {
-            models = await fetchTogetherAIModels();
+            models = await fetchTogetherAIModels(tempApiKey);
           } catch {
             setModelsError('Could not fetch Together AI models. Please check your API key and connection.');
             models = [];
@@ -425,7 +101,7 @@ export default function SettingsPage() {
           break;
         case 'Groq':
           try {
-            models = await fetchGroqModels();
+            models = await fetchGroqModels(tempApiKey);
           } catch {
             setModelsError('Could not fetch Groq models. Please check your API key and connection.');
             models = [];
@@ -437,7 +113,7 @@ export default function SettingsPage() {
         default:
           models = [];
       }
-      
+
       if (models.length > 0) {
         setAvailableModels(models);
         // Update temp model selection based on available models
@@ -488,7 +164,7 @@ export default function SettingsPage() {
     }
     if (savedMaxTokens) setMaxTokens(parseInt(savedMaxTokens));
     if (savedUseAdaptive !== null) setUseAdaptiveTokens(savedUseAdaptive === 'true');
-    
+
     // Initialize temporary settings with saved values
     setTempApiKey(savedApiKey || '');
     setTempSelectedProviderName(savedProvider || 'OpenRouter');
@@ -500,11 +176,11 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetchAvailableModels();
-  }, [tempSelectedProviderName, tempApiKey]);
+  }, [fetchAvailableModels]);
 
   const saveSettings = async () => {
     setSaveStatus('saving');
-    
+
     // Save all temporary settings to localStorage
     localStorage.setItem('openrouter-api-key', tempApiKey);
     localStorage.setItem('selected-provider', tempSelectedProviderName);
@@ -513,7 +189,7 @@ export default function SettingsPage() {
     localStorage.setItem('selected-model', tempSelectedModel);
     localStorage.setItem('max-tokens', tempMaxTokens.toString());
     localStorage.setItem('use-adaptive-tokens', tempUseAdaptiveTokens.toString());
-    
+
     // Update the actual state variables after saving
     setApiKey(tempApiKey);
     setSelectedProviderName(tempSelectedProviderName);
@@ -522,7 +198,7 @@ export default function SettingsPage() {
     setSelectedModel(tempSelectedModel);
     setMaxTokens(tempMaxTokens);
     setUseAdaptiveTokens(tempUseAdaptiveTokens);
-    
+
     // Simulate saving delay
     setTimeout(() => {
       setSaveStatus('saved');
@@ -561,8 +237,8 @@ export default function SettingsPage() {
           case 'search':
             return model.supportsWebSearch;
           case 'free':
-            return model.id.toLowerCase().includes('free') || 
-                   (model.description?.toLowerCase().includes('free') ?? false);
+            return model.id.toLowerCase().includes('free') ||
+              (model.description?.toLowerCase().includes('free') ?? false);
           default:
             return true;
         }
@@ -576,8 +252,8 @@ export default function SettingsPage() {
   });
 
   const toggleFilter = (filter: string) => {
-    setSelectedFilters(prev => 
-      prev.includes(filter) 
+    setSelectedFilters(prev =>
+      prev.includes(filter)
         ? prev.filter(f => f !== filter)
         : [...prev, filter]
     );
@@ -591,12 +267,12 @@ export default function SettingsPage() {
   // Check if there are unsaved changes
   const hasUnsavedChanges = () => {
     return tempApiKey !== apiKey ||
-           tempSelectedProviderName !== selectedProviderName ||
-           tempSelectedProviderUrl !== selectedProviderUrl ||
-           tempCustomApiUrl !== customApiUrl ||
-           tempSelectedModel !== selectedModel ||
-           tempMaxTokens !== maxTokens ||
-           tempUseAdaptiveTokens !== useAdaptiveTokens;
+      tempSelectedProviderName !== selectedProviderName ||
+      tempSelectedProviderUrl !== selectedProviderUrl ||
+      tempCustomApiUrl !== customApiUrl ||
+      tempSelectedModel !== selectedModel ||
+      tempMaxTokens !== maxTokens ||
+      tempUseAdaptiveTokens !== useAdaptiveTokens;
   };
 
   // Discard all temporary changes
@@ -617,7 +293,7 @@ export default function SettingsPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16">
             <div className="flex items-center gap-2 sm:gap-4">
-              <Link 
+              <Link
                 href="/"
                 className="inline-flex items-center gap-1 sm:gap-2 text-gray-600 dark:text-dark-300 hover:text-gray-900 dark:hover:text-white transition-all duration-200 hover:scale-105 text-sm sm:text-base"
               >
@@ -643,11 +319,10 @@ export default function SettingsPage() {
               <button
                 onClick={saveSettings}
                 disabled={saveStatus === 'saving'}
-                className={`inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-md disabled:opacity-50 transition-all duration-300 transform hover:scale-105 text-xs sm:text-sm ${
-                  hasUnsavedChanges() 
-                    ? 'bg-orange-600 hover:bg-orange-700 text-white animate-pulse shadow-lg' 
-                    : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg'
-                }`}
+                className={`inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-md disabled:opacity-50 transition-all duration-300 transform hover:scale-105 text-xs sm:text-sm ${hasUnsavedChanges()
+                  ? 'bg-orange-600 hover:bg-orange-700 text-white animate-pulse shadow-lg'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg'
+                  }`}
               >
                 {saveStatus === 'saving' ? (
                   <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
@@ -657,8 +332,8 @@ export default function SettingsPage() {
                   <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200 group-hover:rotate-12" />
                 )}
                 <span className="hidden sm:inline">
-                  {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved!' : 
-                   hasUnsavedChanges() ? 'Save Changes' : 'Save Settings'}
+                  {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved!' :
+                    hasUnsavedChanges() ? 'Save Changes' : 'Save Settings'}
                 </span>
                 <span className="sm:hidden">
                   {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved!' : 'Save'}
@@ -676,11 +351,10 @@ export default function SettingsPage() {
           <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto scrollbar-hide">
             <button
               onClick={() => setActiveTab('provider')}
-              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${
-                activeTab === 'provider'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
-              }`}
+              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${activeTab === 'provider'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
+                : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
+                }`}
             >
               <div className="flex items-center gap-1 sm:gap-2">
                 <Settings className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
@@ -690,11 +364,10 @@ export default function SettingsPage() {
             </button>
             <button
               onClick={() => setActiveTab('models')}
-              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${
-                activeTab === 'models'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
-              }`}
+              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${activeTab === 'models'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
+                : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
+                }`}
             >
               <div className="flex items-center gap-1 sm:gap-2">
                 <Bot className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
@@ -707,11 +380,10 @@ export default function SettingsPage() {
             </button>
             <button
               onClick={() => setActiveTab('tokens')}
-              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${
-                activeTab === 'tokens'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
-              }`}
+              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${activeTab === 'tokens'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
+                : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
+                }`}
             >
               <div className="flex items-center gap-1 sm:gap-2">
                 <Settings className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
@@ -721,11 +393,10 @@ export default function SettingsPage() {
             </button>
             <button
               onClick={() => setActiveTab('about')}
-              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${
-                activeTab === 'about'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
-              }`}
+              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${activeTab === 'about'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
+                : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
+                }`}
             >
               <div className="flex items-center gap-1 sm:gap-2">
                 <Bot className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
@@ -744,7 +415,7 @@ export default function SettingsPage() {
                 <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-dark-100 mb-3 sm:mb-4 transition-colors duration-300">
                   Provider Configuration
                 </h2>
-                
+
                 <div className="space-y-3 sm:space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-dark-200 mb-2 transition-colors duration-300">
@@ -809,7 +480,7 @@ export default function SettingsPage() {
                 <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-dark-100 mb-3 sm:mb-4 transition-colors duration-300">
                   🔑 Get Your API Key
                 </h3>
-                
+
                 {tempSelectedProviderName === 'OpenRouter' && (
                   <div className="space-y-3">
                     <p className="text-sm text-gray-600 dark:text-dark-400">
@@ -841,7 +512,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 )}
-                
+
                 {tempSelectedProviderName === 'Together AI' && (
                   <div className="space-y-3">
                     <p className="text-sm text-gray-600 dark:text-dark-400">
@@ -873,7 +544,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 )}
-                
+
                 {tempSelectedProviderName === 'Groq' && (
                   <div className="space-y-3">
                     <p className="text-sm text-gray-600 dark:text-dark-400">
@@ -922,7 +593,7 @@ export default function SettingsPage() {
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4">
                   Provider Statistics
                 </h2>
-                
+
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600 dark:text-dark-400">Total Models</span>
@@ -996,21 +667,19 @@ export default function SettingsPage() {
                       <div className="flex border border-gray-300 dark:border-dark-800 rounded-md transition-colors duration-300">
                         <button
                           onClick={() => setViewMode('list')}
-                          className={`p-2 text-sm transition-all duration-200 hover:scale-105 ${
-                            viewMode === 'list'
-                              ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-                              : 'text-gray-600 dark:text-dark-400 hover:bg-gray-100 dark:hover:bg-dark-800'
-                          }`}
+                          className={`p-2 text-sm transition-all duration-200 hover:scale-105 ${viewMode === 'list'
+                            ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                            : 'text-gray-600 dark:text-dark-400 hover:bg-gray-100 dark:hover:bg-dark-800'
+                            }`}
                         >
                           <List className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
                         </button>
                         <button
                           onClick={() => setViewMode('grid')}
-                          className={`p-2 text-sm border-l border-gray-300 dark:border-dark-800 transition-all duration-200 hover:scale-105 ${
-                            viewMode === 'grid'
-                              ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-                              : 'text-gray-600 dark:text-dark-400 hover:bg-gray-100 dark:hover:bg-dark-800'
-                          }`}
+                          className={`p-2 text-sm border-l border-gray-300 dark:border-dark-800 transition-all duration-200 hover:scale-105 ${viewMode === 'grid'
+                            ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                            : 'text-gray-600 dark:text-dark-400 hover:bg-gray-100 dark:hover:bg-dark-800'
+                            }`}
                         >
                           <Grid className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
                         </button>
@@ -1044,15 +713,14 @@ export default function SettingsPage() {
                       <Filter className="w-3 h-3 sm:w-4 sm:h-4 text-gray-500 dark:text-dark-400 transition-colors duration-200" />
                       <span className="text-xs sm:text-sm text-gray-500 dark:text-dark-400 transition-colors duration-200">Filter:</span>
                     </div>
-                    
+
                     <div className="flex flex-wrap gap-2">
                       <button
                         onClick={() => toggleFilter('reasoning')}
-                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${
-                          selectedFilters.includes('reasoning')
-                            ? 'bg-purple-100 text-purple-700 dark:bg-dark-800 dark:text-purple-300 shadow-md'
-                            : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
-                        }`}
+                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${selectedFilters.includes('reasoning')
+                          ? 'bg-purple-100 text-purple-700 dark:bg-dark-800 dark:text-purple-300 shadow-md'
+                          : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
+                          }`}
                       >
                         <Brain className="w-3 h-3 transition-transform duration-200" />
                         <span className="hidden xs:inline">Reasoning</span>
@@ -1060,11 +728,10 @@ export default function SettingsPage() {
 
                       <button
                         onClick={() => toggleFilter('vision')}
-                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${
-                          selectedFilters.includes('vision')
-                            ? 'bg-green-100 text-green-700 dark:bg-dark-800 dark:text-green-300 shadow-md'
-                            : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
-                        }`}
+                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${selectedFilters.includes('vision')
+                          ? 'bg-green-100 text-green-700 dark:bg-dark-800 dark:text-green-300 shadow-md'
+                          : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
+                          }`}
                       >
                         <ImageIcon className="w-3 h-3 transition-transform duration-200" />
                         <span className="hidden xs:inline">Vision</span>
@@ -1072,11 +739,10 @@ export default function SettingsPage() {
 
                       <button
                         onClick={() => toggleFilter('search')}
-                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${
-                          selectedFilters.includes('search')
-                            ? 'bg-blue-100 text-blue-700 dark:bg-dark-800 dark:text-blue-300 shadow-md'
-                            : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
-                        }`}
+                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${selectedFilters.includes('search')
+                          ? 'bg-blue-100 text-blue-700 dark:bg-dark-800 dark:text-blue-300 shadow-md'
+                          : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
+                          }`}
                       >
                         <Search className="w-3 h-3 transition-transform duration-200" />
                         <span className="hidden xs:inline">Web Search</span>
@@ -1084,11 +750,10 @@ export default function SettingsPage() {
 
                       <button
                         onClick={() => toggleFilter('free')}
-                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${
-                          selectedFilters.includes('free')
-                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 shadow-md'
-                            : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
-                        }`}
+                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${selectedFilters.includes('free')
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 shadow-md'
+                          : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
+                          }`}
                       >
                         <Sparkles className="w-3 h-3 transition-transform duration-200" />
                         <span className="hidden xs:inline">Free</span>
@@ -1121,7 +786,7 @@ export default function SettingsPage() {
                         <Search className="w-8 h-8 mx-auto" />
                       </div>
                       <p className="text-gray-500 dark:text-dark-400 text-sm">
-                        {searchQuery || selectedFilters.length > 0 
+                        {searchQuery || selectedFilters.length > 0
                           ? 'No models match your search criteria'
                           : 'No models available'
                         }
@@ -1136,8 +801,8 @@ export default function SettingsPage() {
                       )}
                     </div>
                   ) : (
-                    <div className={viewMode === 'grid' 
-                      ? 'grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4' 
+                    <div className={viewMode === 'grid'
+                      ? 'grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4'
                       : 'space-y-3'
                     }>
                       {filteredModels.map((model) => (
@@ -1146,11 +811,10 @@ export default function SettingsPage() {
                           onClick={() => {
                             setTempSelectedModel(model.id); // Only update temp selection
                           }}
-                          className={`p-3 sm:p-4 rounded-lg border-2 cursor-pointer transition-all duration-300 relative transform hover:scale-[1.02] hover:shadow-lg tap-highlight-none ${
-                            tempSelectedModel === model.id
-                              ? 'border-blue-500 bg-blue-50 dark:bg-dark-800 shadow-md scale-[1.01]'
-                              : 'border-gray-200 dark:border-dark-700 hover:border-gray-300 dark:hover:border-dark-600 hover:shadow-sm'
-                          }`}
+                          className={`p-3 sm:p-4 rounded-lg border-2 cursor-pointer transition-all duration-300 relative transform hover:scale-[1.02] hover:shadow-lg tap-highlight-none ${tempSelectedModel === model.id
+                            ? 'border-blue-500 bg-blue-50 dark:bg-dark-800 shadow-md scale-[1.01]'
+                            : 'border-gray-200 dark:border-dark-700 hover:border-gray-300 dark:hover:border-dark-600 hover:shadow-sm'
+                            }`}
                         >
                           {/* Currently active model indicator */}
                           {selectedModel === model.id && (
@@ -1158,7 +822,7 @@ export default function SettingsPage() {
                               <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded-full border-2 border-white shadow-sm animate-ping"></div>
                             </div>
                           )}
-                          
+
                           <div className="flex items-start justify-between">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-start gap-2">
@@ -1238,11 +902,11 @@ export default function SettingsPage() {
                       </span>
                     )}
                   </h2>
-                  
+
                   {(() => {
                     const model = availableModels.find(m => m.id === tempSelectedModel);
                     if (!model) return null;
-                    
+
                     return (
                       <div className="space-y-4">
                         <div>
@@ -1253,14 +917,14 @@ export default function SettingsPage() {
                             Model ID: <code className="bg-gray-100 dark:bg-dark-800 px-1 rounded">{model.id}</code>
                           </p>
                         </div>
-                        
+
                         <div>
                           <h4 className="font-medium text-gray-900 dark:text-dark-100 mb-2">Description</h4>
                           <p className="text-sm text-gray-600 dark:text-dark-400">
                             {model.description}
                           </p>
                         </div>
-                        
+
                         <div>
                           <h4 className="font-medium text-gray-900 dark:text-dark-100 mb-2">Capabilities</h4>
                           <div className="space-y-2">
@@ -1295,7 +959,7 @@ export default function SettingsPage() {
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4">
                   Search Results
                 </h2>
-                
+
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600 dark:text-dark-400">Showing</span>
@@ -1342,7 +1006,7 @@ export default function SettingsPage() {
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4 transition-colors duration-300">
                   Response Length Settings
                 </h2>
-                
+
                 <div className="space-y-6">
                   <div>
                     <div className="flex items-center gap-3 mb-4">
@@ -1387,7 +1051,7 @@ export default function SettingsPage() {
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4 transition-colors duration-300">
                   💡 Understanding Tokens
                 </h3>
-                
+
                 <div className="space-y-4 text-sm text-gray-600 dark:text-dark-400 transition-colors duration-300">
                   <div>
                     <h4 className="font-medium text-gray-900 dark:text-dark-100 mb-2 transition-colors duration-300">What are tokens?</h4>
@@ -1398,7 +1062,7 @@ export default function SettingsPage() {
                       <li>&quot;Hello world&quot; = ~3 tokens</li>
                     </ul>
                   </div>
-                  
+
                   <div>
                     <h4 className="font-medium text-gray-900 dark:text-dark-100 mb-2 transition-colors duration-300">Response Length Guide</h4>
                     <ul className="space-y-2">
@@ -1434,7 +1098,7 @@ export default function SettingsPage() {
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4 transition-colors duration-300">
                   About RavenGPT
                 </h2>
-                
+
                 <div className="space-y-4">
                   <div>
                     <h3 className="text-sm font-medium text-gray-900 dark:text-dark-100 mb-2 transition-colors duration-300">
@@ -1493,12 +1157,12 @@ export default function SettingsPage() {
                 <h2 className="text-lg font-semibold text-yellow-800 dark:text-yellow-200 mb-4">
                   ⚠️ Development Notice
                 </h2>
-                
+
                 <div className="space-y-4 text-sm text-yellow-700 dark:text-yellow-300">
                   <div>
                     <h4 className="font-medium mb-2">Current Status</h4>
                     <p>
-                      This application is currently in the <strong>development phase</strong>. 
+                      This application is currently in the <strong>development phase</strong>.
                       While we strive for stability and reliability, you may encounter:
                     </p>
                     <ul className="list-disc ml-5 mt-2 space-y-1">
@@ -1520,7 +1184,7 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="p-3 bg-yellow-100 dark:bg-yellow-900/40 rounded border border-yellow-300 dark:border-yellow-600">
-                    <strong>Tip:</strong> If you encounter any issues, try refreshing the page, 
+                    <strong>Tip:</strong> If you encounter any issues, try refreshing the page,
                     checking your API key, or switching to a different AI provider in the settings.
                   </div>
                 </div>
@@ -1530,7 +1194,7 @@ export default function SettingsPage() {
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4">
                   Technical Information
                 </h2>
-                
+
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600 dark:text-dark-400">Framework</span>
