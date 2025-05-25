@@ -17,6 +17,13 @@ export const metadata: Metadata = {
   description: "A beautiful frontend-only RavenGPT that uses your OpenRouter API key to chat with free AI models. No backend required!",
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{

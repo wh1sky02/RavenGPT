@@ -1351,26 +1351,27 @@ export default function Home() {
   });
 
   return (
-    <div className="flex h-screen bg-white dark:bg-black">
-      <div className={`${showSidebar ? 'w-64' : 'w-0'} transition-all duration-200 overflow-hidden bg-gray-50 dark:bg-black border-r border-gray-200 dark:border-gray-700 flex flex-col`}>
+    <div className="h-screen flex bg-white dark:bg-dark-950">
+      {/* Sidebar */}
+      <div className={`${showSidebar ? 'w-64' : 'w-0'} transition-all duration-200 overflow-hidden bg-gray-50 dark:bg-dark-925 border-r border-gray-200 dark:border-dark-800 flex flex-col`}>
         {/* Sidebar Header */}
         <div className="p-3">
           {/* Search Box */}
           <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-dark-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search chats..."
-              className="w-full pl-10 pr-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+              className="w-full pl-10 pr-3 py-2 text-sm bg-white dark:bg-dark-900 border border-gray-300 dark:border-dark-800 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-dark-100 placeholder-gray-500 dark:placeholder-dark-400"
             />
           </div>
           
           {/* New Chat Button */}
           <button
             onClick={createNewChat}
-            className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-700 dark:text-white border border-gray-300 dark:border-white/20 rounded-md hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-sm"
+            className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-700 dark:text-dark-100 border border-gray-300 dark:border-dark-800 rounded-md hover:bg-gray-100 dark:hover:bg-dark-850 transition-colors text-sm"
           >
             <Plus className="w-4 h-4" />
             New chat
@@ -1381,19 +1382,19 @@ export default function Home() {
         <div className="flex-1 overflow-y-auto px-3 pb-3">
           {filteredChatSessions.length === 0 ? (
             <div className="text-center py-8">
-              <div className="text-gray-500 dark:text-gray-400 text-sm">
+              <div className="text-gray-500 dark:text-dark-400 text-sm">
                 {searchQuery ? 'No chats found' : chatSessions.length === 0 ? 'No chats yet' : 'No matching chats'}
               </div>
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="text-blue-500 hover:text-blue-600 text-sm mt-2"
+                  className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 text-sm mt-2"
                 >
                   Clear search
                 </button>
               )}
               {chatSessions.length === 0 && (
-                <p className="text-gray-400 dark:text-gray-500 text-xs mt-2">
+                <p className="text-gray-400 dark:text-dark-500 text-xs mt-2">
                   Create a new chat to get started
                 </p>
               )}
@@ -1404,8 +1405,8 @@ export default function Home() {
                 key={chat.id}
                 className={`group relative p-3 rounded-md cursor-pointer transition-colors mb-1 ${
                   currentChatId === chat.id
-                    ? 'bg-gray-200 dark:bg-white/10'
-                    : 'hover:bg-gray-100 dark:hover:bg-white/5'
+                    ? 'bg-gray-200 dark:bg-dark-850'
+                    : 'hover:bg-gray-100 dark:hover:bg-dark-900'
                 }`}
                 onClick={() => switchToChat(chat.id)}
               >
@@ -1424,13 +1425,13 @@ export default function Home() {
                         setEditingTitle('');
                       }
                     }}
-                    className="w-full text-sm bg-transparent border-none outline-none text-gray-900 dark:text-white"
+                    className="w-full text-sm bg-transparent border-none outline-none text-gray-900 dark:text-dark-100"
                     autoFocus
                   />
                 ) : (
                   <div className="flex items-center justify-between">
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-gray-900 dark:text-white truncate">{chat.title}</div>
+                      <div className="text-sm text-gray-900 dark:text-dark-100 truncate">{chat.title}</div>
                     </div>
                     
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1440,7 +1441,7 @@ export default function Home() {
                           setEditingChatId(chat.id);
                           setEditingTitle(chat.title);
                         }}
-                        className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/10 rounded text-gray-500 dark:text-white/70 hover:text-gray-700 dark:hover:text-white"
+                        className="p-1.5 hover:bg-gray-100 dark:hover:bg-dark-800 rounded text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200"
                       >
                         <Edit3 className="w-3 h-3" />
                       </button>
@@ -1449,7 +1450,7 @@ export default function Home() {
                           e.stopPropagation();
                           deleteChat(chat.id);
                         }}
-                        className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/10 rounded text-gray-500 dark:text-white/70 hover:text-gray-700 dark:hover:text-white"
+                        className="p-1.5 hover:bg-gray-100 dark:hover:bg-dark-800 rounded text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
@@ -1464,25 +1465,25 @@ export default function Home() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        <header className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+        <header className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-dark-800">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowSidebar(!showSidebar)}
-              className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+              className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-dark-800 text-gray-600 dark:text-dark-300"
             >
               {showSidebar ? <Sidebar className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
             
-            <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
+            <h1 className="text-lg font-semibold text-gray-900 dark:text-dark-100">
               RavenGPT
             </h1>
           </div>
           
           <div className="flex items-center gap-2">
             {/* Current Model Display */}
-            <div className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md">
-              <Bot className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-              <span className="text-gray-700 dark:text-gray-300">
+            <div className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-50 dark:bg-dark-900 border border-gray-300 dark:border-dark-800 rounded-md">
+              <Bot className="w-4 h-4 text-gray-500 dark:text-dark-400" />
+              <span className="text-gray-700 dark:text-dark-200">
                 {isLoadingModels ? (
                   'Loading models...'
                 ) : availableModels.length === 0 ? (
@@ -1502,7 +1503,7 @@ export default function Home() {
             {/* Dark Mode Toggle */}
             <button
               onClick={toggleDarkMode}
-              className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors"
+              className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-dark-800 text-gray-600 dark:text-dark-300 transition-colors"
               title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
@@ -1510,7 +1511,7 @@ export default function Home() {
             
             <Link
               href="/settings"
-              className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+              className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-dark-800 text-gray-600 dark:text-dark-300"
             >
               <Settings className="w-5 h-5" />
             </Link>
@@ -1518,7 +1519,7 @@ export default function Home() {
         </header>
 
         {/* Feature Mode Selector - Simplified */}
-        <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+        <div className="px-4 py-2 bg-gray-50 dark:bg-dark-925 border-b border-gray-200 dark:border-dark-800">
           <div className="flex justify-between items-center">
             <div className="flex gap-1">
               {[
@@ -1532,8 +1533,8 @@ export default function Home() {
                   onClick={() => setMode(mode)}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors font-medium ${
                     featureMode === mode
-                      ? 'bg-gray-200 text-gray-900 dark:bg-gray-600 dark:text-white'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      ? 'bg-gray-200 text-gray-900 dark:bg-dark-800 dark:text-dark-100'
+                      : 'text-gray-600 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-800'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -1550,7 +1551,7 @@ export default function Home() {
                   className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
                     showReasoning
                       ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
-                      : 'bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-400'
+                      : 'bg-gray-200 text-gray-600 dark:bg-dark-800 dark:text-dark-400'
                   }`}
                 >
                   <Brain className="w-3 h-3" />
@@ -1565,17 +1566,17 @@ export default function Home() {
         <div className="flex-1 overflow-y-auto">
           {/* Real-time Reasoning Display */}
           {featureMode === 'reasoning' && isLoading && currentStreamingReasoning && (
-            <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+            <div className="border-b border-gray-200 dark:border-dark-800 bg-gray-50 dark:bg-dark-925">
               <div className="max-w-3xl mx-auto px-4 py-6">
                 <div className="flex gap-4">
                   <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0">
                     <Brain className="w-5 h-5 text-white" />
                   </div>
                   <div className="flex-1">
-                    <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <div className="text-sm font-medium text-gray-700 dark:text-dark-300 mb-2">
                       Thinking...
                     </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
+                    <div className="text-sm text-gray-600 dark:text-dark-400 whitespace-pre-wrap">
                       {currentStreamingReasoning}
                       <span className="inline-block w-2 h-4 bg-gray-500 ml-1 animate-pulse"></span>
                     </div>
@@ -1590,15 +1591,15 @@ export default function Home() {
               <div className="text-center max-w-md mx-auto px-4">
                 {!currentChatId ? (
                   <>
-                    <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+                    <h2 className="text-3xl font-semibold text-gray-900 dark:text-dark-100 mb-4">
                       Welcome to RavenGPT
                     </h2>
-                    <p className="text-lg text-gray-500 dark:text-gray-400 mb-6">
+                    <p className="text-lg text-gray-500 dark:text-dark-400 mb-6">
                       Start a new conversation or select an existing chat from the sidebar.
                     </p>
                     <button
                       onClick={createNewChat}
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 dark:bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-blue-700 transition-all duration-200 font-medium transform hover:scale-105 shadow-lg hover:shadow-xl"
                     >
                       <Plus className="w-5 h-5" />
                       Start New Chat
@@ -1606,10 +1607,10 @@ export default function Home() {
                   </>
                 ) : (
                   <>
-                    <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+                    <h2 className="text-3xl font-semibold text-gray-900 dark:text-dark-100 mb-4">
                       How can I help you today?
                     </h2>
-                    <p className="text-lg text-gray-500 dark:text-gray-400">
+                    <p className="text-lg text-gray-500 dark:text-dark-400">
                       {featureMode === 'reasoning' && 'Advanced reasoning mode enabled'}
                       {featureMode === 'web-search' && 'Web search enabled'}
                       {featureMode === 'vision' && 'Vision analysis ready'}
@@ -1622,8 +1623,8 @@ export default function Home() {
           ) : (
             <div>
               {messages.map((message, index) => (
-                <div key={message.id} className={`border-b border-gray-200 dark:border-gray-700 ${
-                  message.role === 'assistant' ? 'bg-gray-50 dark:bg-gray-900' : ''
+                <div key={message.id} className={`border-b border-gray-200 dark:border-dark-800 ${
+                  message.role === 'assistant' ? 'bg-gray-50 dark:bg-dark-925' : ''
                 }`}>
                   <div className="max-w-3xl mx-auto px-4 py-6">
                     <div className="flex gap-4">
@@ -1642,7 +1643,7 @@ export default function Home() {
                       
                       {/* Message Content */}
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-gray-900 dark:text-white text-sm mb-2">
+                        <div className="font-semibold text-gray-900 dark:text-dark-100 text-sm mb-2">
                           {message.role === 'user' ? 'You' : 'RavenGPT'}
                         </div>
                         
@@ -1683,7 +1684,7 @@ export default function Home() {
                             )}
                           </div>
                         ) : (
-                          <div className="text-gray-900 dark:text-white">
+                          <div className="text-gray-900 dark:text-dark-100">
                             {typeof message.content === 'string' ? (
                               <div className="whitespace-pre-wrap">{message.content}</div>
                             ) : (
@@ -1699,7 +1700,7 @@ export default function Home() {
                                         alt="Uploaded image" 
                                         width={400}
                                         height={300}
-                                        className="rounded-lg border border-gray-200 dark:border-gray-700"
+                                        className="rounded-lg border border-gray-200 dark:border-dark-800"
                                         unoptimized
                                       />
                                     )}
@@ -1712,8 +1713,8 @@ export default function Home() {
 
                         {/* Citations */}
                         {message.citations && message.citations.length > 0 && (
-                          <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-600">
-                            <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Sources:</div>
+                          <div className="mt-4 pt-3 border-t border-gray-200 dark:border-dark-800">
+                            <div className="text-xs font-medium text-gray-600 dark:text-dark-400 mb-2">Sources:</div>
                             <div className="space-y-1">
                               {message.citations.map((citation, index) => (
                                 <div key={index}>
@@ -1731,7 +1732,7 @@ export default function Home() {
                           </div>
                         )}
                         
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+                        <div className="text-xs text-gray-500 dark:text-dark-400 mt-3">
                           {message.timestamp.toLocaleTimeString()}
                         </div>
                       </div>
@@ -1741,14 +1742,14 @@ export default function Home() {
               ))}
               
               {isLoading && (
-                <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                <div className="border-b border-gray-200 dark:border-dark-800 bg-gray-50 dark:bg-dark-925">
                   <div className="max-w-3xl mx-auto px-4 py-6">
                     <div className="flex gap-4">
                       <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center">
                         <Bot className="w-5 h-5 text-white" />
                       </div>
                       <div className="flex-1">
-                        <div className="font-semibold text-gray-900 dark:text-white text-sm mb-2">
+                        <div className="font-semibold text-gray-900 dark:text-dark-100 text-sm mb-2">
                           RavenGPT
                         </div>
                         <div className="flex space-x-1">
@@ -1768,16 +1769,16 @@ export default function Home() {
 
         {/* File Upload Area */}
         {uploadedFiles.length > 0 && (
-          <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+          <div className="px-4 py-3 bg-gray-50 dark:bg-dark-925 border-t border-gray-200 dark:border-dark-800">
             <div className="max-w-3xl mx-auto">
               <div className="flex flex-wrap gap-2">
                 {uploadedFiles.map((file, index) => (
-                  <div key={index} className="flex items-center gap-2 bg-white dark:bg-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-200 dark:border-gray-600">
+                  <div key={index} className="flex items-center gap-2 bg-white dark:bg-dark-900 px-3 py-2 rounded-lg text-sm border border-gray-200 dark:border-dark-800">
                     {file.type === 'image' ? <ImageIcon className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
                     <span className="max-w-32 truncate">{file.name}</span>
                     <button
                       onClick={() => removeUploadedFile(index)}
-                      className="text-gray-400 hover:text-red-500"
+                      className="text-gray-400 dark:text-dark-400 hover:text-red-500 dark:hover:text-red-400"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -1790,7 +1791,7 @@ export default function Home() {
 
         <div className="p-4">
           <div className="max-w-3xl mx-auto">
-            <div className="relative bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm">
+            <div className="relative bg-white dark:bg-dark-900 border border-gray-300 dark:border-dark-800 rounded-xl shadow-sm">
               <div className="flex items-end">
                 <div className="flex-1">
                   <textarea
@@ -1804,7 +1805,7 @@ export default function Home() {
                     }}
                     placeholder={!currentChatId ? "Start a new chat or select an existing one..." : "Message RavenGPT..."}
                     disabled={!apiKey || isLoading}
-                    className="w-full resize-none border-none outline-none bg-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 p-4 max-h-32"
+                    className="w-full resize-none border-none outline-none bg-transparent text-gray-900 dark:text-dark-100 placeholder-gray-500 dark:placeholder-dark-400 p-4 max-h-32"
                     rows={1}
                     style={{
                       minHeight: '24px',
@@ -1818,7 +1819,7 @@ export default function Home() {
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={!apiKey || isLoading}
-                      className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-50 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+                      className="p-2 text-gray-400 dark:text-dark-400 hover:text-gray-600 dark:hover:text-dark-200 disabled:opacity-50 rounded-md hover:bg-gray-100 dark:hover:bg-dark-800"
                     >
                       <Upload className="w-5 h-5" />
                     </button>
@@ -1827,7 +1828,7 @@ export default function Home() {
                   <button
                     onClick={sendMessage}
                     disabled={!input.trim() || !apiKey || isLoading}
-                    className="p-2 bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-400 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50 disabled:hover:bg-gray-200 dark:disabled:hover:bg-gray-600 transition-colors"
+                    className="p-2 bg-gray-200 dark:bg-dark-800 text-gray-500 dark:text-dark-300 rounded-md hover:bg-gray-300 dark:hover:bg-dark-750 disabled:opacity-50 disabled:hover:bg-gray-200 dark:disabled:hover:bg-dark-800 transition-colors"
                     title={!currentChatId && input.trim() ? "Start new chat" : "Send message"}
                   >
                     <Send className="w-5 h-5" />

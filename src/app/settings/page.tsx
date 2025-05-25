@@ -76,6 +76,26 @@ export default function SettingsPage() {
   const [maxTokens, setMaxTokens] = useState(500);
   const [useAdaptiveTokens, setUseAdaptiveTokens] = useState(true);
 
+  // Dark mode initialization - runs immediately on mount
+  useEffect(() => {
+    const savedDarkMode = localStorage.getItem('dark-mode');
+    const systemPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    let shouldUseDarkMode = false;
+    
+    if (savedDarkMode !== null) {
+      shouldUseDarkMode = savedDarkMode === 'true';
+    } else {
+      shouldUseDarkMode = systemPrefersDark;
+    }
+    
+    if (shouldUseDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
   // Switch provider helper - now only updates temporary state
   const switchProvider = (providerName: string) => {
     setTempSelectedProviderName(providerName);
@@ -591,113 +611,124 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-black">
+    <div className="min-h-screen bg-gray-50 dark:bg-dark-950 transition-colors duration-300">
       {/* Header */}
-      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+      <div className="bg-white dark:bg-dark-900 border-b border-gray-200 dark:border-dark-800 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between h-14 sm:h-16">
+            <div className="flex items-center gap-2 sm:gap-4">
               <Link 
                 href="/"
-                className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                className="inline-flex items-center gap-1 sm:gap-2 text-gray-600 dark:text-dark-300 hover:text-gray-900 dark:hover:text-white transition-all duration-200 hover:scale-105 text-sm sm:text-base"
               >
-                <ArrowLeft className="w-5 h-5" />
-                Back to Chat
+                <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200" />
+                <span className="hidden xs:inline">Back to Chat</span>
+                <span className="xs:hidden">Back</span>
               </Link>
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
+              <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-dark-100 transition-colors duration-300">
                 Settings
               </h1>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
               {hasUnsavedChanges() && (
                 <button
                   onClick={discardChanges}
-                  className="inline-flex items-center gap-2 px-3 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors text-sm"
+                  className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-all duration-200 text-xs sm:text-sm transform hover:scale-105 animate-fadeIn"
                 >
-                  <X className="w-4 h-4" />
-                  Discard Changes
+                  <X className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
+                  <span className="hidden sm:inline">Discard Changes</span>
+                  <span className="sm:hidden">Discard</span>
                 </button>
               )}
               <button
                 onClick={saveSettings}
                 disabled={saveStatus === 'saving'}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-md disabled:opacity-50 transition-colors ${
+                className={`inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-md disabled:opacity-50 transition-all duration-300 transform hover:scale-105 text-xs sm:text-sm ${
                   hasUnsavedChanges() 
-                    ? 'bg-orange-600 hover:bg-orange-700 text-white animate-pulse' 
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    ? 'bg-orange-600 hover:bg-orange-700 text-white animate-pulse shadow-lg' 
+                    : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg'
                 }`}
               >
                 {saveStatus === 'saving' ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                 ) : saveStatus === 'saved' ? (
-                  <Check className="w-4 h-4" />
+                  <Check className="w-3 h-3 sm:w-4 sm:h-4 animate-bounce" />
                 ) : (
-                  <Sparkles className="w-4 h-4" />
+                  <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200 group-hover:rotate-12" />
                 )}
-                {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved!' : 
-                 hasUnsavedChanges() ? 'Save Changes' : 'Save Settings'}
+                <span className="hidden sm:inline">
+                  {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved!' : 
+                   hasUnsavedChanges() ? 'Save Changes' : 'Save Settings'}
+                </span>
+                <span className="sm:hidden">
+                  {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved!' : 'Save'}
+                </span>
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Tab Navigation */}
-        <div className="border-b border-gray-200 dark:border-gray-700 mb-8">
-          <nav className="-mb-px flex space-x-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+        {/* Tab Navigation - Mobile Optimized */}
+        <div className="border-b border-gray-200 dark:border-dark-800 mb-6 sm:mb-8 transition-colors duration-300">
+          {/* Mobile: Horizontal Scroll Tabs */}
+          <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto scrollbar-hide">
             <button
               onClick={() => setActiveTab('provider')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${
                 activeTab === 'provider'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <Settings className="w-4 h-4" />
-                Provider & API
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Settings className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
+                <span className="hidden sm:inline">Provider & API</span>
+                <span className="sm:hidden">Provider</span>
               </div>
             </button>
             <button
               onClick={() => setActiveTab('models')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${
                 activeTab === 'models'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <Bot className="w-4 h-4" />
-                Model Selection
-                <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs rounded-full">
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Bot className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
+                <span className="hidden sm:inline">Model Selection</span>
+                <span className="sm:hidden">Models</span>
+                <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-dark-800 text-gray-600 dark:text-dark-300 text-xs rounded-full transition-all duration-200 animate-pulse">
                   {filteredModels.length}
                 </span>
               </div>
             </button>
             <button
               onClick={() => setActiveTab('tokens')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${
                 activeTab === 'tokens'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <Settings className="w-4 h-4" />
-                Token Settings
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Settings className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
+                <span className="hidden sm:inline">Token Settings</span>
+                <span className="sm:hidden">Tokens</span>
               </div>
             </button>
             <button
               onClick={() => setActiveTab('about')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${
                 activeTab === 'about'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <Bot className="w-4 h-4" />
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Bot className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
                 About
               </div>
             </button>
@@ -706,23 +737,23 @@ export default function SettingsPage() {
 
         {/* Provider Tab Content */}
         {activeTab === 'provider' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8 animate-fadeInSlide">
             {/* Provider Configuration */}
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <div className="space-y-4 sm:space-y-6">
+              <div className="bg-white dark:bg-dark-900 rounded-lg shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl transform hover:scale-[1.02]">
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-dark-100 mb-3 sm:mb-4 transition-colors duration-300">
                   Provider Configuration
                 </h2>
                 
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-dark-200 mb-2 transition-colors duration-300">
                       AI Provider
                     </label>
                     <select
                       value={tempSelectedProviderName}
                       onChange={(e) => switchProvider(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                      className="w-full px-3 py-2.5 sm:py-2 text-sm border border-gray-300 dark:border-dark-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-dark-850 text-gray-900 dark:text-dark-100 transition-all duration-200 focus:scale-[1.02] hover:border-blue-400"
                     >
                       {Object.keys(PROVIDER_URLS).map((providerName) => (
                         <option key={providerName} value={providerName}>
@@ -733,7 +764,7 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-dark-200 mb-2 transition-colors duration-300">
                       API Key
                     </label>
                     <input
@@ -741,13 +772,13 @@ export default function SettingsPage() {
                       value={tempApiKey}
                       onChange={(e) => setTempApiKey(e.target.value)}
                       placeholder="Enter your API key"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                      className="w-full px-3 py-2.5 sm:py-2 text-sm border border-gray-300 dark:border-dark-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-dark-850 text-gray-900 dark:text-dark-100 placeholder-gray-500 dark:placeholder-dark-400 transition-all duration-200 focus:scale-[1.02] hover:border-blue-400"
                     />
                   </div>
 
                   {tempSelectedProviderName === 'Custom API URL' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <div className="animate-fadeInSlide">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-dark-200 mb-2 transition-colors duration-300">
                         Custom API URL
                       </label>
                       <input
@@ -755,16 +786,16 @@ export default function SettingsPage() {
                         value={tempCustomApiUrl}
                         onChange={(e) => setTempCustomApiUrl(e.target.value)}
                         placeholder="https://your-api-endpoint.com/v1/chat/completions"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                        className="w-full px-3 py-2.5 sm:py-2 text-sm border border-gray-300 dark:border-dark-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-dark-850 text-gray-900 dark:text-dark-100 placeholder-gray-500 dark:placeholder-dark-400 transition-all duration-200 focus:scale-[1.02] hover:border-blue-400"
                       />
                     </div>
                   )}
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-dark-200 mb-2 transition-colors duration-300">
                       API Endpoint
                     </label>
-                    <div className="px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 rounded-md text-gray-600 dark:text-gray-400 font-mono">
+                    <div className="px-3 py-2.5 sm:py-2 text-sm bg-gray-100 dark:bg-dark-800 rounded-md text-gray-600 dark:text-dark-300 font-mono transition-all duration-300 hover:bg-gray-200 dark:hover:bg-dark-750 break-all">
                       {getApiUrl() || 'Not configured'}
                     </div>
                   </div>
@@ -773,15 +804,15 @@ export default function SettingsPage() {
             </div>
 
             {/* Provider Help & Stats */}
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <div className="space-y-4 sm:space-y-6">
+              <div className="bg-white dark:bg-dark-900 rounded-lg shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl transform hover:scale-[1.02]">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-dark-100 mb-3 sm:mb-4 transition-colors duration-300">
                   🔑 Get Your API Key
                 </h3>
                 
                 {tempSelectedProviderName === 'OpenRouter' && (
                   <div className="space-y-3">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <p className="text-sm text-gray-600 dark:text-dark-400">
                       🌐 Access to 100+ AI models + $1 free credit
                     </p>
                     <div className="space-y-2">
@@ -799,13 +830,13 @@ export default function SettingsPage() {
                         href="https://openrouter.ai/docs/quick-start"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 text-sm transition-colors w-full justify-center"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-dark-800 text-gray-700 dark:text-dark-300 rounded-md hover:bg-gray-200 dark:hover:bg-dark-750 text-sm transition-colors w-full justify-center"
                       >
                         📚 Documentation
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                    <div className="text-xs text-gray-500 dark:text-dark-400">
                       💡 Free models available + $1 bonus credit for premium models
                     </div>
                   </div>
@@ -813,7 +844,7 @@ export default function SettingsPage() {
                 
                 {tempSelectedProviderName === 'Together AI' && (
                   <div className="space-y-3">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <p className="text-sm text-gray-600 dark:text-dark-400">
                       🚀 Fast inference with top open-source models
                     </p>
                     <div className="space-y-2">
@@ -831,13 +862,13 @@ export default function SettingsPage() {
                         href="https://docs.together.ai/docs/quickstart"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 text-sm transition-colors w-full justify-center"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-dark-800 text-gray-700 dark:text-dark-300 rounded-md hover:bg-gray-200 dark:hover:bg-dark-750 text-sm transition-colors w-full justify-center"
                       >
                         📚 Documentation
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                    <div className="text-xs text-gray-500 dark:text-dark-400">
                       ⚡ Competitive pricing • Best open-source models
                     </div>
                   </div>
@@ -845,7 +876,7 @@ export default function SettingsPage() {
                 
                 {tempSelectedProviderName === 'Groq' && (
                   <div className="space-y-3">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <p className="text-sm text-gray-600 dark:text-dark-400">
                       🆓 Ultra-fast inference • 14,400 free requests/day
                     </p>
                     <div className="space-y-2">
@@ -863,13 +894,13 @@ export default function SettingsPage() {
                         href="https://console.groq.com/docs/quickstart"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 text-sm transition-colors w-full justify-center"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-dark-800 text-gray-700 dark:text-dark-300 rounded-md hover:bg-gray-200 dark:hover:bg-dark-750 text-sm transition-colors w-full justify-center"
                       >
                         📚 Documentation
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                    <div className="text-xs text-gray-500 dark:text-dark-400">
                       ⚡ Fastest inference available • Generous free tier
                     </div>
                   </div>
@@ -877,60 +908,60 @@ export default function SettingsPage() {
 
                 {tempSelectedProviderName === 'Custom API URL' && (
                   <div className="space-y-3">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <p className="text-sm text-gray-600 dark:text-dark-400">
                       Connect to your own OpenAI-compatible API endpoint
                     </p>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                    <div className="text-xs text-gray-500 dark:text-dark-400">
                       🔧 Use your own OpenAI-compatible API endpoint. Make sure to include the full URL path to the chat completions endpoint.
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              <div className="bg-white dark:bg-dark-900 rounded-lg shadow p-6">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4">
                   Provider Statistics
                 </h2>
                 
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Total Models</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    <span className="text-sm text-gray-600 dark:text-dark-400">Total Models</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
                       {availableModels.length}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Free Models</span>
+                    <span className="text-sm text-gray-600 dark:text-dark-400">Free Models</span>
                     <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
                       {availableModels.filter(m => m.id.toLowerCase().includes('free') || (m.description?.toLowerCase().includes('free') ?? false)).length}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">With Reasoning</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    <span className="text-sm text-gray-600 dark:text-dark-400">With Reasoning</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
                       {availableModels.filter(m => m.supportsReasoning).length}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">With Vision</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    <span className="text-sm text-gray-600 dark:text-dark-400">With Vision</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
                       {availableModels.filter(m => m.supportsImages).length}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Web Search</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    <span className="text-sm text-gray-600 dark:text-dark-400">Web Search</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
                       {availableModels.filter(m => m.supportsWebSearch).length}
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-blue-50 dark:bg-gray-900 rounded-lg p-4 border border-blue-200 dark:border-gray-600">
-                <h4 className="text-sm font-medium text-blue-800 dark:text-gray-200 mb-2">
+              <div className="bg-blue-50 dark:bg-dark-900 rounded-lg p-4 border border-blue-200 dark:border-dark-800">
+                <h4 className="text-sm font-medium text-blue-800 dark:text-dark-200 mb-2">
                   💡 Quick Setup Tips
                 </h4>
-                <div className="text-xs text-blue-700 dark:text-gray-300 space-y-1">
+                <div className="text-xs text-blue-700 dark:text-dark-300 space-y-1">
                   <div>• <strong>Fastest setup:</strong> Groq (sign up → get key → paste)</div>
                   <div>• <strong>Most models:</strong> OpenRouter (100+ models + free options + $1 credit)</div>
                   <div>• <strong>Open source focus:</strong> Together AI (fast inference, competitive pricing)</div>
@@ -943,45 +974,45 @@ export default function SettingsPage() {
 
         {/* Models Tab Content */}
         {activeTab === 'models' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Model Selection - Takes 2 columns */}
-            <div className="lg:col-span-2">
-              <div className="bg-white dark:bg-gray-900 rounded-lg shadow">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8 animate-fadeInSlide">
+            {/* Model Selection - Takes 2 columns on desktop */}
+            <div className="xl:col-span-2">
+              <div className="bg-white dark:bg-dark-900 rounded-lg shadow-lg transition-all duration-300 hover:shadow-xl">
                 {/* Header */}
-                <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center justify-between mb-4">
+                <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-dark-800 transition-colors duration-300">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3 sm:gap-0">
                     <div className="flex items-center gap-3">
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-dark-100 transition-colors duration-300">
                         Available Models
                       </h2>
-                      <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs rounded-full">
+                      <span className="px-2 py-1 bg-gray-100 dark:bg-dark-800 text-gray-600 dark:text-dark-400 text-xs rounded-full transition-all duration-300 animate-pulse">
                         {filteredModels.length} models
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
                       {isLoadingModels && (
-                        <RefreshCw className="w-5 h-5 animate-spin text-blue-600" />
+                        <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-blue-600" />
                       )}
-                      <div className="flex border border-gray-300 dark:border-gray-600 rounded-md">
+                      <div className="flex border border-gray-300 dark:border-dark-800 rounded-md transition-colors duration-300">
                         <button
                           onClick={() => setViewMode('list')}
-                          className={`p-2 text-sm ${
+                          className={`p-2 text-sm transition-all duration-200 hover:scale-105 ${
                             viewMode === 'list'
                               ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-                              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                              : 'text-gray-600 dark:text-dark-400 hover:bg-gray-100 dark:hover:bg-dark-800'
                           }`}
                         >
-                          <List className="w-4 h-4" />
+                          <List className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
                         </button>
                         <button
                           onClick={() => setViewMode('grid')}
-                          className={`p-2 text-sm border-l border-gray-300 dark:border-gray-600 ${
+                          className={`p-2 text-sm border-l border-gray-300 dark:border-dark-800 transition-all duration-200 hover:scale-105 ${
                             viewMode === 'grid'
                               ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-                              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                              : 'text-gray-600 dark:text-dark-400 hover:bg-gray-100 dark:hover:bg-dark-800'
                           }`}
                         >
-                          <Grid className="w-4 h-4" />
+                          <Grid className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
                         </button>
                       </div>
                     </div>
@@ -989,91 +1020,95 @@ export default function SettingsPage() {
 
                   {/* Search Bar */}
                   <div className="relative mb-4">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-3 h-3 sm:w-4 sm:h-4 transition-colors duration-200" />
                     <input
                       type="text"
                       placeholder="Search models by name, ID, or description..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                      className="w-full pl-8 sm:pl-10 pr-4 py-2.5 sm:py-2 text-sm border border-gray-300 dark:border-dark-800 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-dark-850 text-gray-900 dark:text-dark-100 placeholder-gray-500 dark:placeholder-dark-400 transition-all duration-200 focus:scale-[1.02] hover:border-blue-400"
                     />
                     {searchQuery && (
                       <button
                         onClick={() => setSearchQuery('')}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-all duration-200 hover:scale-110 p-1"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="w-3 h-3 sm:w-4 sm:h-4" />
                       </button>
                     )}
                   </div>
 
-                  {/* Filters */}
+                  {/* Filters - Mobile Optimized */}
                   <div className="flex flex-wrap items-center gap-2">
-                    <Filter className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                    <span className="text-sm text-gray-500 dark:text-gray-400 mr-2">Filter by:</span>
+                    <div className="flex items-center gap-2 mb-2 sm:mb-0">
+                      <Filter className="w-3 h-3 sm:w-4 sm:h-4 text-gray-500 dark:text-dark-400 transition-colors duration-200" />
+                      <span className="text-xs sm:text-sm text-gray-500 dark:text-dark-400 transition-colors duration-200">Filter:</span>
+                    </div>
                     
-                    <button
-                      onClick={() => toggleFilter('reasoning')}
-                      className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                        selectedFilters.includes('reasoning')
-                          ? 'bg-purple-100 text-purple-700 dark:bg-gray-700 dark:text-purple-300'
-                          : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-                      }`}
-                    >
-                      <Brain className="w-3 h-3" />
-                      Reasoning
-                    </button>
-
-                    <button
-                      onClick={() => toggleFilter('vision')}
-                      className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                        selectedFilters.includes('vision')
-                          ? 'bg-green-100 text-green-700 dark:bg-gray-700 dark:text-green-300'
-                          : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-                      }`}
-                    >
-                      <ImageIcon className="w-3 h-3" />
-                      Vision
-                    </button>
-
-                    <button
-                      onClick={() => toggleFilter('search')}
-                      className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                        selectedFilters.includes('search')
-                          ? 'bg-blue-100 text-blue-700 dark:bg-gray-700 dark:text-blue-300'
-                          : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-                      }`}
-                    >
-                      <Search className="w-3 h-3" />
-                      Web Search
-                    </button>
-
-                    <button
-                      onClick={() => toggleFilter('free')}
-                      className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                        selectedFilters.includes('free')
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                          : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-                      }`}
-                    >
-                      <Sparkles className="w-3 h-3" />
-                      Free
-                    </button>
-
-                    {(searchQuery || selectedFilters.length > 0) && (
+                    <div className="flex flex-wrap gap-2">
                       <button
-                        onClick={clearFilters}
-                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                        onClick={() => toggleFilter('reasoning')}
+                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${
+                          selectedFilters.includes('reasoning')
+                            ? 'bg-purple-100 text-purple-700 dark:bg-dark-800 dark:text-purple-300 shadow-md'
+                            : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
+                        }`}
                       >
-                        <X className="w-3 h-3" />
-                        Clear All
+                        <Brain className="w-3 h-3 transition-transform duration-200" />
+                        <span className="hidden xs:inline">Reasoning</span>
                       </button>
-                    )}
+
+                      <button
+                        onClick={() => toggleFilter('vision')}
+                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${
+                          selectedFilters.includes('vision')
+                            ? 'bg-green-100 text-green-700 dark:bg-dark-800 dark:text-green-300 shadow-md'
+                            : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
+                        }`}
+                      >
+                        <ImageIcon className="w-3 h-3 transition-transform duration-200" />
+                        <span className="hidden xs:inline">Vision</span>
+                      </button>
+
+                      <button
+                        onClick={() => toggleFilter('search')}
+                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${
+                          selectedFilters.includes('search')
+                            ? 'bg-blue-100 text-blue-700 dark:bg-dark-800 dark:text-blue-300 shadow-md'
+                            : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
+                        }`}
+                      >
+                        <Search className="w-3 h-3 transition-transform duration-200" />
+                        <span className="hidden xs:inline">Web Search</span>
+                      </button>
+
+                      <button
+                        onClick={() => toggleFilter('free')}
+                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${
+                          selectedFilters.includes('free')
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 shadow-md'
+                            : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
+                        }`}
+                      >
+                        <Sparkles className="w-3 h-3 transition-transform duration-200" />
+                        <span className="hidden xs:inline">Free</span>
+                      </button>
+
+                      {(searchQuery || selectedFilters.length > 0) && (
+                        <button
+                          onClick={clearFilters}
+                          className="inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 transition-all duration-200 transform hover:scale-105 animate-fadeIn"
+                        >
+                          <X className="w-3 h-3 transition-transform duration-200" />
+                          <span className="hidden xs:inline">Clear</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 {/* Models Display */}
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                   {modelsError && (
                     <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
                       <p className="text-sm text-red-800 dark:text-red-200">{modelsError}</p>
@@ -1085,7 +1120,7 @@ export default function SettingsPage() {
                       <div className="text-gray-400 mb-2">
                         <Search className="w-8 h-8 mx-auto" />
                       </div>
-                      <p className="text-gray-500 dark:text-gray-400 text-sm">
+                      <p className="text-gray-500 dark:text-dark-400 text-sm">
                         {searchQuery || selectedFilters.length > 0 
                           ? 'No models match your search criteria'
                           : 'No models available'
@@ -1102,7 +1137,7 @@ export default function SettingsPage() {
                     </div>
                   ) : (
                     <div className={viewMode === 'grid' 
-                      ? 'grid grid-cols-1 md:grid-cols-2 gap-4' 
+                      ? 'grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4' 
                       : 'space-y-3'
                     }>
                       {filteredModels.map((model) => (
@@ -1111,16 +1146,16 @@ export default function SettingsPage() {
                           onClick={() => {
                             setTempSelectedModel(model.id); // Only update temp selection
                           }}
-                          className={`p-4 rounded-lg border-2 cursor-pointer transition-all relative ${
+                          className={`p-3 sm:p-4 rounded-lg border-2 cursor-pointer transition-all duration-300 relative transform hover:scale-[1.02] hover:shadow-lg tap-highlight-none ${
                             tempSelectedModel === model.id
-                              ? 'border-blue-500 bg-blue-50 dark:bg-gray-700'
-                              : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-sm'
+                              ? 'border-blue-500 bg-blue-50 dark:bg-dark-800 shadow-md scale-[1.01]'
+                              : 'border-gray-200 dark:border-dark-700 hover:border-gray-300 dark:hover:border-dark-600 hover:shadow-sm'
                           }`}
                         >
                           {/* Currently active model indicator */}
                           {selectedModel === model.id && (
-                            <div className="absolute top-2 right-2">
-                              <div className="w-3 h-3 bg-green-500 rounded-full border-2 border-white shadow-sm" title="Currently active model"></div>
+                            <div className="absolute top-2 right-2 animate-pulse">
+                              <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded-full border-2 border-white shadow-sm animate-ping"></div>
                             </div>
                           )}
                           
@@ -1128,58 +1163,58 @@ export default function SettingsPage() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-start gap-2">
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <h3 className="font-medium text-gray-900 dark:text-white text-sm leading-tight">
-                                      {model.name.replace(' (Free)', '').replace('(Free Tier)', '').split(' ').slice(0, 4).join(' ')}
-                                      {model.name.split(' ').length > 4 && '...'}
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h3 className="font-medium text-gray-900 dark:text-dark-100 text-sm leading-tight transition-colors duration-200">
+                                      {model.name.replace(' (Free)', '').replace('(Free Tier)', '').split(' ').slice(0, 3).join(' ')}
+                                      {model.name.split(' ').length > 3 && '...'}
                                     </h3>
                                     {(model.id.toLowerCase().includes('free') || (model.description?.toLowerCase().includes('free') ?? false)) && (
-                                      <span className="px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs rounded font-medium">
+                                      <span className="px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs rounded font-medium animate-pulse">
                                         FREE
                                       </span>
                                     )}
                                     {selectedModel === model.id && (
-                                      <span className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded font-medium">
+                                      <span className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded font-medium animate-bounce">
                                         ACTIVE
                                       </span>
                                     )}
                                   </div>
                                 </div>
                                 {tempSelectedModel === model.id && (
-                                  <div className="flex-shrink-0">
-                                    <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
-                                      <Check className="w-3 h-3 text-white" />
+                                  <div className="flex-shrink-0 animate-fadeIn">
+                                    <div className="w-4 h-4 sm:w-5 sm:h-5 bg-blue-600 rounded-full flex items-center justify-center transition-all duration-200 animate-bounce">
+                                      <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
                                     </div>
                                   </div>
                                 )}
                               </div>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">
+                              <p className="text-xs text-gray-500 dark:text-dark-400 mt-1 font-mono transition-colors duration-200 truncate">
                                 {model.id}
                               </p>
-                              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">
+                              <p className="text-xs text-gray-600 dark:text-dark-400 mt-1 line-clamp-2 transition-colors duration-200">
                                 {model.description}
                               </p>
                               {!(model.id.toLowerCase().includes('free') || (model.description?.toLowerCase().includes('free') ?? false)) && model.pricing && (
-                                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                                <p className="text-xs text-gray-500 dark:text-dark-500 mt-1 transition-colors duration-200">
                                   ${model.pricing.prompt.toFixed(4)} / ${model.pricing.completion.toFixed(4)} per 1K tokens
                                 </p>
                               )}
                               <div className="flex gap-1 mt-2 flex-wrap">
                                 {model.supportsReasoning && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs rounded">
-                                    <Brain className="w-3 h-3" />
-                                    {viewMode === 'list' && 'Reasoning'}
+                                  <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs rounded transition-all duration-200 hover:scale-105">
+                                    <Brain className="w-2.5 h-2.5 sm:w-3 sm:h-3 transition-transform duration-200" />
+                                    <span className="hidden sm:inline">{viewMode === 'list' && 'Reasoning'}</span>
                                   </span>
                                 )}
                                 {model.supportsImages && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded">
-                                    <ImageIcon className="w-3 h-3" />
-                                    {viewMode === 'list' && 'Vision'}
+                                  <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded transition-all duration-200 hover:scale-105">
+                                    <ImageIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3 transition-transform duration-200" />
+                                    <span className="hidden sm:inline">{viewMode === 'list' && 'Vision'}</span>
                                   </span>
                                 )}
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-gray-700 text-blue-700 dark:text-blue-300 text-xs rounded">
-                                  <Search className="w-3 h-3" />
-                                  {viewMode === 'list' && 'Web Search'}
+                                <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-blue-100 dark:bg-dark-800 text-blue-700 dark:text-blue-300 text-xs rounded transition-all duration-200 hover:scale-105">
+                                  <Search className="w-2.5 h-2.5 sm:w-3 sm:h-3 transition-transform duration-200" />
+                                  <span className="hidden sm:inline">{viewMode === 'list' && 'Web Search'}</span>
                                 </span>
                               </div>
                             </div>
@@ -1193,12 +1228,12 @@ export default function SettingsPage() {
             </div>
 
             {/* Model Details Sidebar */}
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {tempSelectedModel && (
-                <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6">
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                <div className="bg-white dark:bg-dark-900 rounded-lg shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl transform hover:scale-[1.02]">
+                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-dark-100 mb-3 sm:mb-4 transition-colors duration-300">
                     Selected Model {tempSelectedModel !== selectedModel && (
-                      <span className="text-sm text-orange-600 dark:text-orange-400 font-normal">
+                      <span className="text-xs sm:text-sm text-orange-600 dark:text-orange-400 font-normal">
                         (Not saved yet)
                       </span>
                     )}
@@ -1211,23 +1246,23 @@ export default function SettingsPage() {
                     return (
                       <div className="space-y-4">
                         <div>
-                          <h3 className="font-medium text-gray-900 dark:text-white text-lg">
+                          <h3 className="font-medium text-gray-900 dark:text-dark-100 text-lg">
                             {model.name.replace(' (Free)', '').replace('(Free Tier)', '')}
                           </h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                            Model ID: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">{model.id}</code>
+                          <p className="text-sm text-gray-600 dark:text-dark-400 mt-1">
+                            Model ID: <code className="bg-gray-100 dark:bg-dark-800 px-1 rounded">{model.id}</code>
                           </p>
                         </div>
                         
                         <div>
-                          <h4 className="font-medium text-gray-900 dark:text-white mb-2">Description</h4>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                          <h4 className="font-medium text-gray-900 dark:text-dark-100 mb-2">Description</h4>
+                          <p className="text-sm text-gray-600 dark:text-dark-400">
                             {model.description}
                           </p>
                         </div>
                         
                         <div>
-                          <h4 className="font-medium text-gray-900 dark:text-white mb-2">Capabilities</h4>
+                          <h4 className="font-medium text-gray-900 dark:text-dark-100 mb-2">Capabilities</h4>
                           <div className="space-y-2">
                             <div className="flex items-center gap-2">
                               <Brain className={`w-4 h-4 ${model.supportsReasoning ? 'text-green-600' : 'text-gray-400'}`} />
@@ -1256,39 +1291,39 @@ export default function SettingsPage() {
               )}
 
               {/* Filtered Stats */}
-              <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              <div className="bg-white dark:bg-dark-900 rounded-lg shadow p-6">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4">
                   Search Results
                 </h2>
                 
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Showing</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    <span className="text-sm text-gray-600 dark:text-dark-400">Showing</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
                       {filteredModels.length} / {availableModels.length}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Free Models</span>
+                    <span className="text-sm text-gray-600 dark:text-dark-400">Free Models</span>
                     <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
                       {filteredModels.filter(m => m.id.toLowerCase().includes('free') || (m.description?.toLowerCase().includes('free') ?? false)).length}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">With Reasoning</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    <span className="text-sm text-gray-600 dark:text-dark-400">With Reasoning</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
                       {filteredModels.filter(m => m.supportsReasoning).length}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">With Vision</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    <span className="text-sm text-gray-600 dark:text-dark-400">With Vision</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
                       {filteredModels.filter(m => m.supportsImages).length}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Web Search</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    <span className="text-sm text-gray-600 dark:text-dark-400">Web Search</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
                       {filteredModels.filter(m => m.supportsWebSearch).length}
                     </span>
                   </div>
@@ -1300,11 +1335,11 @@ export default function SettingsPage() {
 
         {/* Token Settings Tab Content */}
         {activeTab === 'tokens' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fadeInSlide">
             {/* Token Configuration */}
             <div className="space-y-6">
-              <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              <div className="bg-white dark:bg-dark-900 rounded-lg shadow-lg p-6 transition-all duration-300 hover:shadow-xl transform hover:scale-[1.02]">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4 transition-colors duration-300">
                   Response Length Settings
                 </h2>
                 
@@ -1316,29 +1351,29 @@ export default function SettingsPage() {
                         id="adaptive-tokens"
                         checked={tempUseAdaptiveTokens}
                         onChange={(e) => setTempUseAdaptiveTokens(e.target.checked)}
-                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                        className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-dark-800 border-gray-300 dark:border-dark-700 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-dark-900 focus:ring-2 transition-all duration-200 transform hover:scale-110"
                       />
-                      <label htmlFor="adaptive-tokens" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <label htmlFor="adaptive-tokens" className="text-sm font-medium text-gray-700 dark:text-dark-200 transition-colors duration-300 cursor-pointer">
                         Smart Token Management (Recommended)
                       </label>
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 ml-7">
+                    <p className="text-xs text-gray-500 dark:text-dark-400 ml-7 transition-colors duration-300">
                       Automatically adjusts response length based on your input length and model context limits
                     </p>
                   </div>
 
-                  <div className={`space-y-4 ${!tempUseAdaptiveTokens ? 'opacity-50' : ''}`}>
+                  <div className={`space-y-4 transition-all duration-300 ${tempUseAdaptiveTokens ? 'opacity-50' : ''}`}>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-dark-200 mb-2 transition-colors duration-300">
                         Maximum Response Length (tokens)
                       </label>
                       <input
                         type="number"
                         value={tempMaxTokens}
                         onChange={(e) => setTempMaxTokens(parseInt(e.target.value) || 500)}
-                        disabled={!tempUseAdaptiveTokens}
+                        disabled={tempUseAdaptiveTokens}
                         placeholder="Enter number of tokens"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 disabled:opacity-50"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-dark-850 text-gray-900 dark:text-dark-100 placeholder-gray-500 dark:placeholder-dark-400 disabled:opacity-50 transition-all duration-200 focus:scale-[1.02] hover:border-blue-400"
                       />
                     </div>
                   </div>
@@ -1348,14 +1383,14 @@ export default function SettingsPage() {
 
             {/* Token Information */}
             <div className="space-y-6">
-              <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              <div className="bg-white dark:bg-dark-900 rounded-lg shadow-lg p-6 transition-all duration-300 hover:shadow-xl transform hover:scale-[1.02]">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4 transition-colors duration-300">
                   💡 Understanding Tokens
                 </h3>
                 
-                <div className="space-y-4 text-sm text-gray-600 dark:text-gray-400">
+                <div className="space-y-4 text-sm text-gray-600 dark:text-dark-400 transition-colors duration-300">
                   <div>
-                    <h4 className="font-medium text-gray-900 dark:text-white mb-2">What are tokens?</h4>
+                    <h4 className="font-medium text-gray-900 dark:text-dark-100 mb-2 transition-colors duration-300">What are tokens?</h4>
                     <p>Tokens are pieces of text that AI models process. Roughly:</p>
                     <ul className="list-disc ml-5 mt-2 space-y-1">
                       <li>1 token ≈ 4 characters</li>
@@ -1365,7 +1400,7 @@ export default function SettingsPage() {
                   </div>
                   
                   <div>
-                    <h4 className="font-medium text-gray-900 dark:text-white mb-2">Response Length Guide</h4>
+                    <h4 className="font-medium text-gray-900 dark:text-dark-100 mb-2 transition-colors duration-300">Response Length Guide</h4>
                     <ul className="space-y-2">
                       <li><strong>50-200 tokens:</strong> Brief answers (1-2 sentences)</li>
                       <li><strong>200-500 tokens:</strong> Short explanations (1 paragraph)</li>
@@ -1375,7 +1410,7 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <h4 className="font-medium text-gray-900 dark:text-white mb-2">Smart Token Management</h4>
+                    <h4 className="font-medium text-gray-900 dark:text-dark-100 mb-2 transition-colors duration-300">Smart Token Management</h4>
                     <p>When enabled, the system automatically:</p>
                     <ul className="list-disc ml-5 mt-2 space-y-1">
                       <li>Calculates your input length</li>
@@ -1392,54 +1427,54 @@ export default function SettingsPage() {
 
         {/* About Tab Content */}
         {activeTab === 'about' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fadeInSlide">
             {/* About Information */}
             <div className="space-y-6">
-              <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              <div className="bg-white dark:bg-dark-900 rounded-lg shadow-lg p-6 transition-all duration-300 hover:shadow-xl transform hover:scale-[1.02]">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4 transition-colors duration-300">
                   About RavenGPT
                 </h2>
                 
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2">
+                    <h3 className="text-sm font-medium text-gray-900 dark:text-dark-100 mb-2 transition-colors duration-300">
                       Created by
                     </h3>
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                      <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                    <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-dark-850 rounded-lg transition-all duration-300 hover:bg-gray-100 dark:hover:bg-dark-800">
+                      <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center transition-transform duration-300 hover:scale-110">
                         <span className="text-white font-bold text-sm">W</span>
                       </div>
                       <div>
-                        <div className="font-medium text-gray-900 dark:text-white">wh1sky02</div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">Developer</div>
+                        <div className="font-medium text-gray-900 dark:text-dark-100 transition-colors duration-300">wh1sky02</div>
+                        <div className="text-sm text-gray-500 dark:text-dark-400 transition-colors duration-300">Developer</div>
                       </div>
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2">
+                    <h3 className="text-sm font-medium text-gray-900 dark:text-dark-100 mb-2 transition-colors duration-300">
                       Version & Status
                     </h3>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-1 bg-blue-100 dark:bg-gray-700 text-blue-700 dark:text-blue-300 text-xs rounded-full font-medium">
+                        <span className="px-2 py-1 bg-blue-100 dark:bg-dark-800 text-blue-700 dark:text-blue-300 text-xs rounded-full font-medium">
                           v1.0.0-beta
                         </span>
                         <span className="px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-xs rounded-full font-medium">
                           Development Phase
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-gray-600 dark:text-dark-400">
                         Built with Next.js 15, TypeScript, and Tailwind CSS
                       </p>
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2">
+                    <h3 className="text-sm font-medium text-gray-900 dark:text-dark-100 mb-2 transition-colors duration-300">
                       Features
                     </h3>
-                    <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                    <ul className="text-sm text-gray-600 dark:text-dark-400 space-y-1">
                       <li>• Multiple AI provider support (OpenRouter, Groq, Together AI)</li>
                       <li>• Advanced reasoning capabilities</li>
                       <li>• Vision analysis and image processing</li>
@@ -1491,44 +1526,44 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              <div className="bg-white dark:bg-dark-900 rounded-lg shadow p-6">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4">
                   Technical Information
                 </h2>
                 
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Framework</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">Next.js 15</span>
+                    <span className="text-sm text-gray-600 dark:text-dark-400">Framework</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">Next.js 15</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Language</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">TypeScript</span>
+                    <span className="text-sm text-gray-600 dark:text-dark-400">Language</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">TypeScript</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Styling</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">Tailwind CSS</span>
+                    <span className="text-sm text-gray-600 dark:text-dark-400">Styling</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">Tailwind CSS</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Icons</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">Lucide React</span>
+                    <span className="text-sm text-gray-600 dark:text-dark-400">Icons</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">Lucide React</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Storage</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">Browser Local Storage</span>
+                    <span className="text-sm text-gray-600 dark:text-dark-400">Storage</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">Browser Local Storage</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Privacy</span>
+                    <span className="text-sm text-gray-600 dark:text-dark-400">Privacy</span>
                     <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">100% Local</span>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-blue-50 dark:bg-gray-900 rounded-lg p-4 border border-blue-200 dark:border-gray-600">
-                <h4 className="text-sm font-medium text-blue-800 dark:text-gray-200 mb-2">
+              <div className="bg-blue-50 dark:bg-dark-900 rounded-lg p-4 border border-blue-200 dark:border-dark-800">
+                <h4 className="text-sm font-medium text-blue-800 dark:text-dark-200 mb-2">
                   🛡️ Privacy & Security
                 </h4>
-                <div className="text-xs text-blue-700 dark:text-gray-300 space-y-1">
+                <div className="text-xs text-blue-700 dark:text-dark-300 space-y-1">
                   <div>• Your API keys are stored locally in your browser only</div>
                   <div>• No data is sent to external servers except AI providers</div>
                   <div>• Chat history is saved locally and never uploaded</div>
@@ -1541,4 +1576,4 @@ export default function SettingsPage() {
       </div>
     </div>
   );
-}
+} 
