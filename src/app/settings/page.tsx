@@ -1,1243 +1,566 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Key, Sparkles, Brain, Search, Image as ImageIcon, Check, RefreshCw, ExternalLink, Filter, Grid, List, X, Settings, Bot } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+    ArrowLeft, Key, Bot, Brain, Sliders, Server, Palette, Info,
+    Eye, EyeOff, RefreshCw, Check, X, Plus, Trash2, ExternalLink,
+    Search, Zap, Image as ImageIcon, Wrench, Edit3, Save,
+    Copy, AlertCircle, CheckCircle, RotateCcw
+} from 'lucide-react';
 import Link from 'next/link';
-import { Model, PROVIDER_URLS } from '@/lib/types';
+import { useSettings } from '@/hooks/useSettings';
+import { Model, PROVIDER_URLS, PERSONAS, MCPServer, Persona, MCP_SERVER_PRESETS, AppSettings } from '@/lib/types';
 import { fetchOpenRouterModels, fetchGroqModels, fetchTogetherAIModels } from '@/lib/api';
 
+type SettingsTab = 'api' | 'models' | 'parameters' | 'personas' | 'mcp' | 'appearance' | 'about';
 
-
-
+const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'api', label: 'API', icon: <Key className="w-4 h-4" /> },
+    { id: 'models', label: 'Models', icon: <Bot className="w-4 h-4" /> },
+    { id: 'parameters', label: 'Parameters', icon: <Sliders className="w-4 h-4" /> },
+    { id: 'personas', label: 'Personas', icon: <Brain className="w-4 h-4" /> },
+    { id: 'mcp', label: 'MCP', icon: <Server className="w-4 h-4" /> },
+    { id: 'appearance', label: 'Appearance', icon: <Palette className="w-4 h-4" /> },
+    { id: 'about', label: 'About', icon: <Info className="w-4 h-4" /> },
+];
 
 export default function SettingsPage() {
-  const [apiKey, setApiKey] = useState('');
-  const [selectedProviderName, setSelectedProviderName] = useState('OpenRouter');
-  const [selectedProviderUrl, setSelectedProviderUrl] = useState(PROVIDER_URLS['OpenRouter']);
-  const [customApiUrl, setCustomApiUrl] = useState('');
-  const [selectedModel, setSelectedModel] = useState('');
-  const [tempSelectedModel, setTempSelectedModel] = useState(''); // Temporary model selection for settings
-  const [availableModels, setAvailableModels] = useState<Model[]>([]);
-  const [isLoadingModels, setIsLoadingModels] = useState(false);
-  const [modelsError, setModelsError] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+    const { settings, saveSettings, updateSetting, addMCPServer, updateMCPServer, removeMCPServer, loadSettings } = useSettings();
 
-  // Temporary state variables for settings (don't affect until save is clicked)
-  const [tempApiKey, setTempApiKey] = useState('');
-  const [tempSelectedProviderName, setTempSelectedProviderName] = useState('OpenRouter');
-  const [tempSelectedProviderUrl, setTempSelectedProviderUrl] = useState(PROVIDER_URLS['OpenRouter']);
-  const [tempCustomApiUrl, setTempCustomApiUrl] = useState('');
-  const [tempMaxTokens, setTempMaxTokens] = useState(500);
-  const [tempUseAdaptiveTokens, setTempUseAdaptiveTokens] = useState(true);
+    const [activeTab, setActiveTab] = useState<SettingsTab>('api');
+    const [showApiKey, setShowApiKey] = useState(false);
+    const [models, setModels] = useState<Model[]>([]);
+    const [modelsLoading, setModelsLoading] = useState(false);
+    const [modelsError, setModelsError] = useState<string | null>(null);
+    const [modelSearch, setModelSearch] = useState('');
+    const [modelFilter, setModelFilter] = useState<'all' | 'free' | 'vision' | 'tools' | 'reasoning'>('all');
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const [apiTestStatus, setApiTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+    const [apiTestMessage, setApiTestMessage] = useState('');
+    const [localSettings, setLocalSettings] = useState<AppSettings>({ ...settings });
+    const [isDirty, setIsDirty] = useState(false);
+    const [newMCPServer, setNewMCPServer] = useState<Partial<MCPServer>>({ name: '', url: '', transport: 'sse', enabled: true, description: '' });
+    const [showMCPForm, setShowMCPForm] = useState(false);
+    const [editingPersona, setEditingPersona] = useState<Partial<Persona> | null>(null);
+    const [showPersonaForm, setShowPersonaForm] = useState(false);
 
-  // Model filtering states
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+    useEffect(() => { setLocalSettings({ ...settings }); }, [settings]);
 
-  // Tab state
-  const [activeTab, setActiveTab] = useState<'provider' | 'models' | 'tokens' | 'about'>('provider');
+    const updateLocal = useCallback(<K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+        setLocalSettings(prev => ({ ...prev, [key]: value }));
+        setIsDirty(true);
+    }, []);
 
-  // Token settings
-  const [maxTokens, setMaxTokens] = useState(500);
-  const [useAdaptiveTokens, setUseAdaptiveTokens] = useState(true);
-
-  // Dark mode initialization - runs immediately on mount
-  useEffect(() => {
-    const savedDarkMode = localStorage.getItem('dark-mode');
-    const systemPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-    let shouldUseDarkMode = false;
-
-    if (savedDarkMode !== null) {
-      shouldUseDarkMode = savedDarkMode === 'true';
-    } else {
-      shouldUseDarkMode = systemPrefersDark;
-    }
-
-    if (shouldUseDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, []);
-
-  // Switch provider helper - now only updates temporary state
-  const switchProvider = (providerName: string) => {
-    setTempSelectedProviderName(providerName);
-    if (providerName !== 'Custom API URL') {
-      setTempSelectedProviderUrl(PROVIDER_URLS[providerName as keyof typeof PROVIDER_URLS]);
-    }
-    // Don't save to localStorage immediately - only save when user clicks Save Settings
-  };
-
-  // Fetch OpenRouter models: imported from api.ts
-
-
-
-  const fetchAvailableModels = useCallback(async () => {
-    setIsLoadingModels(true);
-    setModelsError(null);
-
-    try {
-      let models: Model[] = [];
-
-      switch (tempSelectedProviderName) {
-        case 'OpenRouter':
-          try {
-            models = await fetchOpenRouterModels();
-          } catch {
-            setModelsError('Could not fetch OpenRouter models. Please check your internet connection.');
-            models = [];
-          }
-          break;
-        case 'Together AI':
-          try {
-            models = await fetchTogetherAIModels(tempApiKey);
-          } catch {
-            setModelsError('Could not fetch Together AI models. Please check your API key and connection.');
-            models = [];
-          }
-          break;
-        case 'Groq':
-          try {
-            models = await fetchGroqModels(tempApiKey);
-          } catch {
-            setModelsError('Could not fetch Groq models. Please check your API key and connection.');
-            models = [];
-          }
-          break;
-        case 'Custom API URL':
-          models = [];
-          break;
-        default:
-          models = [];
-      }
-
-      if (models.length > 0) {
-        setAvailableModels(models);
-        // Update temp model selection based on available models
-        setTempSelectedModel(currentTempModel => {
-          // If current temp model exists in new models, keep it
-          if (currentTempModel && models.find(m => m.id === currentTempModel)) {
-            return currentTempModel;
-          }
-          // Otherwise, use the first available model as temp selection
-          return models[0]?.id || '';
-        });
-      } else {
-        setAvailableModels([]);
-        setTempSelectedModel('');
-      }
-    } catch (error) {
-      console.error('Unexpected error fetching models:', error);
-      setModelsError(`Unexpected error loading models from ${tempSelectedProviderName}.`);
-      setAvailableModels([]);
-      setSelectedModel('');
-      localStorage.removeItem('selected-model');
-    } finally {
-      setIsLoadingModels(false);
-    }
-  }, [tempSelectedProviderName, tempApiKey]);
-
-  useEffect(() => {
-    // Load settings
-    const savedApiKey = localStorage.getItem('openrouter-api-key');
-    const savedProvider = localStorage.getItem('selected-provider');
-    const savedProviderUrl = localStorage.getItem('selected-provider-url');
-    const savedCustomUrl = localStorage.getItem('custom-api-url');
-    const savedModel = localStorage.getItem('selected-model');
-    const savedMaxTokens = localStorage.getItem('max-tokens');
-    const savedUseAdaptive = localStorage.getItem('use-adaptive-tokens');
-
-    // Load actual settings
-    if (savedApiKey) setApiKey(savedApiKey);
-    if (savedProvider && PROVIDER_URLS[savedProvider as keyof typeof PROVIDER_URLS]) {
-      setSelectedProviderName(savedProvider);
-      setSelectedProviderUrl(PROVIDER_URLS[savedProvider as keyof typeof PROVIDER_URLS]);
-    }
-    if (savedProviderUrl) setSelectedProviderUrl(savedProviderUrl);
-    if (savedCustomUrl) setCustomApiUrl(savedCustomUrl);
-    if (savedModel) {
-      setSelectedModel(savedModel);
-      setTempSelectedModel(savedModel);
-    }
-    if (savedMaxTokens) setMaxTokens(parseInt(savedMaxTokens));
-    if (savedUseAdaptive !== null) setUseAdaptiveTokens(savedUseAdaptive === 'true');
-
-    // Initialize temporary settings with saved values
-    setTempApiKey(savedApiKey || '');
-    setTempSelectedProviderName(savedProvider || 'OpenRouter');
-    setTempSelectedProviderUrl(savedProviderUrl || PROVIDER_URLS['OpenRouter']);
-    setTempCustomApiUrl(savedCustomUrl || '');
-    setTempMaxTokens(savedMaxTokens ? parseInt(savedMaxTokens) : 500);
-    setTempUseAdaptiveTokens(savedUseAdaptive !== null ? savedUseAdaptive === 'true' : true);
-  }, []);
-
-  useEffect(() => {
-    fetchAvailableModels();
-  }, [fetchAvailableModels]);
-
-  const saveSettings = async () => {
-    setSaveStatus('saving');
-
-    // Save all temporary settings to localStorage
-    localStorage.setItem('openrouter-api-key', tempApiKey);
-    localStorage.setItem('selected-provider', tempSelectedProviderName);
-    localStorage.setItem('selected-provider-url', tempSelectedProviderUrl);
-    localStorage.setItem('custom-api-url', tempCustomApiUrl);
-    localStorage.setItem('selected-model', tempSelectedModel);
-    localStorage.setItem('max-tokens', tempMaxTokens.toString());
-    localStorage.setItem('use-adaptive-tokens', tempUseAdaptiveTokens.toString());
-
-    // Update the actual state variables after saving
-    setApiKey(tempApiKey);
-    setSelectedProviderName(tempSelectedProviderName);
-    setSelectedProviderUrl(tempSelectedProviderUrl);
-    setCustomApiUrl(tempCustomApiUrl);
-    setSelectedModel(tempSelectedModel);
-    setMaxTokens(tempMaxTokens);
-    setUseAdaptiveTokens(tempUseAdaptiveTokens);
-
-    // Simulate saving delay
-    setTimeout(() => {
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    }, 500);
-  };
-
-  const getApiUrl = () => {
-    if (tempSelectedProviderName === 'Custom API URL') {
-      return tempCustomApiUrl;
-    }
-    return tempSelectedProviderUrl;
-  };
-
-  // Filter models based on search and filters
-  const filteredModels = availableModels.filter(model => {
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      const matchesName = model.name.toLowerCase().includes(query);
-      const matchesId = model.id.toLowerCase().includes(query);
-      const matchesDescription = model.description?.toLowerCase().includes(query);
-      if (!matchesName && !matchesId && !matchesDescription) {
-        return false;
-      }
-    }
-
-    // Capability filters
-    if (selectedFilters.length > 0) {
-      const hasRequiredCapabilities = selectedFilters.every(filter => {
-        switch (filter) {
-          case 'reasoning':
-            return model.supportsReasoning;
-          case 'vision':
-            return model.supportsImages;
-          case 'search':
-            return model.supportsWebSearch;
-          case 'free':
-            return model.id.toLowerCase().includes('free') ||
-              (model.description?.toLowerCase().includes('free') ?? false);
-          default:
-            return true;
+    const handleSave = useCallback(async () => {
+        setSaveStatus('saving');
+        try {
+            saveSettings(localSettings);
+            setIsDirty(false);
+            setSaveStatus('saved');
+            setTimeout(() => setSaveStatus('idle'), 2000);
+        } catch {
+            setSaveStatus('error');
+            setTimeout(() => setSaveStatus('idle'), 3000);
         }
-      });
-      if (!hasRequiredCapabilities) {
-        return false;
-      }
-    }
+    }, [localSettings, saveSettings]);
 
-    return true;
-  });
+    const handleReset = useCallback(() => {
+        if (confirm('Reset all settings to defaults? This cannot be undone.')) {
+            loadSettings();
+            setIsDirty(false);
+        }
+    }, [loadSettings]);
 
-  const toggleFilter = (filter: string) => {
-    setSelectedFilters(prev =>
-      prev.includes(filter)
-        ? prev.filter(f => f !== filter)
-        : [...prev, filter]
+    const loadModels = useCallback(async () => {
+        if (!localSettings.apiKey) { setModelsError('Please enter an API key first.'); return; }
+        setModelsLoading(true);
+        setModelsError(null);
+        try {
+            let fetchedModels: Model[] = [];
+            if (localSettings.providerName === 'OpenRouter') {
+                fetchedModels = await fetchOpenRouterModels(localSettings.apiKey);
+            } else if (localSettings.providerName === 'Groq') {
+                fetchedModels = await fetchGroqModels(localSettings.apiKey);
+            } else if (localSettings.providerName === 'Together AI') {
+                fetchedModels = await fetchTogetherAIModels(localSettings.apiKey);
+            }
+            setModels(fetchedModels);
+        } catch (err) {
+            setModelsError(err instanceof Error ? err.message : 'Failed to load models');
+        } finally {
+            setModelsLoading(false);
+        }
+    }, [localSettings.apiKey, localSettings.providerName]);
+
+    const testApiKey = useCallback(async () => {
+        if (!localSettings.apiKey) return;
+        setApiTestStatus('testing');
+        setApiTestMessage('');
+        try {
+            const url = localSettings.providerUrl || PROVIDER_URLS[localSettings.providerName] || PROVIDER_URLS['OpenRouter'];
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${localSettings.apiKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: localSettings.selectedModel || 'openai/gpt-4o-mini',
+                    messages: [{ role: 'user', content: 'Reply with just "OK".' }],
+                    max_tokens: 5
+                })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const reply = data.choices?.[0]?.message?.content || 'Connected';
+                setApiTestStatus('success');
+                setApiTestMessage(`API working! Response: "${reply.trim()}"`);
+            } else {
+                const err = await response.json().catch(() => ({ error: { message: response.statusText } }));
+                setApiTestStatus('error');
+                setApiTestMessage(err.error?.message || response.statusText);
+            }
+        } catch (err) {
+            setApiTestStatus('error');
+            setApiTestMessage(err instanceof Error ? err.message : 'Connection failed');
+        }
+    }, [localSettings.apiKey, localSettings.providerName, localSettings.providerUrl, localSettings.selectedModel]);
+
+    const filteredModels = models.filter(model => {
+        const matchesSearch = !modelSearch || model.name.toLowerCase().includes(modelSearch.toLowerCase()) || model.id.toLowerCase().includes(modelSearch.toLowerCase());
+        const matchesFilter = modelFilter === 'all' || (modelFilter === 'free' && model.isFree) || (modelFilter === 'vision' && model.supportsImages) || (modelFilter === 'tools' && model.supportsTools) || (modelFilter === 'reasoning' && model.supportsReasoning);
+        return matchesSearch && matchesFilter;
+    });
+
+    const handleAddMCPServer = useCallback(() => {
+        if (!newMCPServer.name || !newMCPServer.url) return;
+        const server: MCPServer = {
+            id: `mcp_${Date.now()}`,
+            name: newMCPServer.name!,
+            url: newMCPServer.url!,
+            transport: newMCPServer.transport || 'sse',
+            enabled: newMCPServer.enabled ?? true,
+            description: newMCPServer.description || '',
+            status: 'disconnected'
+        };
+        if (newMCPServer.apiKey) server.apiKey = newMCPServer.apiKey;
+        addMCPServer(server);
+        setNewMCPServer({ name: '', url: '', transport: 'sse', enabled: true, description: '' });
+        setShowMCPForm(false);
+    }, [newMCPServer, addMCPServer]);
+
+    const handleAddPreset = useCallback((preset: typeof MCP_SERVER_PRESETS[0]) => {
+        addMCPServer({ id: `mcp_${Date.now()}`, name: preset.name, url: preset.url, transport: preset.transport, enabled: false, description: preset.description || '', status: 'disconnected' });
+    }, [addMCPServer]);
+
+    const handleSavePersona = useCallback(() => {
+        if (!editingPersona?.name || !editingPersona?.systemPrompt) return;
+        const persona: Persona = {
+            id: editingPersona.id || `persona_${Date.now()}`,
+            name: editingPersona.name,
+            description: editingPersona.description || '',
+            systemPrompt: editingPersona.systemPrompt,
+            icon: editingPersona.icon || '🤖',
+            isCustom: true
+        };
+        const existing = localSettings.personas || [];
+        const idx = existing.findIndex(p => p.id === persona.id);
+        const updated = idx >= 0 ? existing.map((p, i) => i === idx ? persona : p) : [...existing, persona];
+        updateLocal('personas', updated);
+        setEditingPersona(null);
+        setShowPersonaForm(false);
+    }, [editingPersona, localSettings.personas, updateLocal]);
+
+    const Toggle = ({ value, onChange }: { value: boolean; onChange: () => void }) => (
+        <button onClick={onChange} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${value ? 'bg-blue-600' : 'bg-gray-300 dark:bg-dark-600'}`}>
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${value ? 'translate-x-6' : 'translate-x-1'}`} />
+        </button>
     );
-  };
 
-  const clearFilters = () => {
-    setSelectedFilters([]);
-    setSearchQuery('');
-  };
-
-  // Check if there are unsaved changes
-  const hasUnsavedChanges = () => {
-    return tempApiKey !== apiKey ||
-      tempSelectedProviderName !== selectedProviderName ||
-      tempSelectedProviderUrl !== selectedProviderUrl ||
-      tempCustomApiUrl !== customApiUrl ||
-      tempSelectedModel !== selectedModel ||
-      tempMaxTokens !== maxTokens ||
-      tempUseAdaptiveTokens !== useAdaptiveTokens;
-  };
-
-  // Discard all temporary changes
-  const discardChanges = () => {
-    setTempApiKey(apiKey);
-    setTempSelectedProviderName(selectedProviderName);
-    setTempSelectedProviderUrl(selectedProviderUrl);
-    setTempCustomApiUrl(customApiUrl);
-    setTempSelectedModel(selectedModel);
-    setTempMaxTokens(maxTokens);
-    setTempUseAdaptiveTokens(useAdaptiveTokens);
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-dark-950 transition-colors duration-300">
-      {/* Header */}
-      <div className="bg-white dark:bg-dark-900 border-b border-gray-200 dark:border-dark-800 transition-colors duration-300">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14 sm:h-16">
-            <div className="flex items-center gap-2 sm:gap-4">
-              <Link
-                href="/"
-                className="inline-flex items-center gap-1 sm:gap-2 text-gray-600 dark:text-dark-300 hover:text-gray-900 dark:hover:text-white transition-all duration-200 hover:scale-105 text-sm sm:text-base"
-              >
-                <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200" />
-                <span className="hidden xs:inline">Back to Chat</span>
-                <span className="xs:hidden">Back</span>
-              </Link>
-              <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-dark-100 transition-colors duration-300">
-                Settings
-              </h1>
-            </div>
-            <div className="flex items-center gap-1 sm:gap-2">
-              {hasUnsavedChanges() && (
-                <button
-                  onClick={discardChanges}
-                  className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-all duration-200 text-xs sm:text-sm transform hover:scale-105 animate-fadeIn"
-                >
-                  <X className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
-                  <span className="hidden sm:inline">Discard Changes</span>
-                  <span className="sm:hidden">Discard</span>
-                </button>
-              )}
-              <button
-                onClick={saveSettings}
-                disabled={saveStatus === 'saving'}
-                className={`inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-md disabled:opacity-50 transition-all duration-300 transform hover:scale-105 text-xs sm:text-sm ${hasUnsavedChanges()
-                  ? 'bg-orange-600 hover:bg-orange-700 text-white animate-pulse shadow-lg'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg'
-                  }`}
-              >
-                {saveStatus === 'saving' ? (
-                  <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
-                ) : saveStatus === 'saved' ? (
-                  <Check className="w-3 h-3 sm:w-4 sm:h-4 animate-bounce" />
-                ) : (
-                  <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200 group-hover:rotate-12" />
-                )}
-                <span className="hidden sm:inline">
-                  {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved!' :
-                    hasUnsavedChanges() ? 'Save Changes' : 'Save Settings'}
-                </span>
-                <span className="sm:hidden">
-                  {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved!' : 'Save'}
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-        {/* Tab Navigation - Mobile Optimized */}
-        <div className="border-b border-gray-200 dark:border-dark-800 mb-6 sm:mb-8 transition-colors duration-300">
-          {/* Mobile: Horizontal Scroll Tabs */}
-          <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto scrollbar-hide">
-            <button
-              onClick={() => setActiveTab('provider')}
-              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${activeTab === 'provider'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
-                : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
-                }`}
-            >
-              <div className="flex items-center gap-1 sm:gap-2">
-                <Settings className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
-                <span className="hidden sm:inline">Provider & API</span>
-                <span className="sm:hidden">Provider</span>
-              </div>
-            </button>
-            <button
-              onClick={() => setActiveTab('models')}
-              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${activeTab === 'models'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
-                : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
-                }`}
-            >
-              <div className="flex items-center gap-1 sm:gap-2">
-                <Bot className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
-                <span className="hidden sm:inline">Model Selection</span>
-                <span className="sm:hidden">Models</span>
-                <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-dark-800 text-gray-600 dark:text-dark-300 text-xs rounded-full transition-all duration-200 animate-pulse">
-                  {filteredModels.length}
-                </span>
-              </div>
-            </button>
-            <button
-              onClick={() => setActiveTab('tokens')}
-              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${activeTab === 'tokens'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
-                : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
-                }`}
-            >
-              <div className="flex items-center gap-1 sm:gap-2">
-                <Settings className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
-                <span className="hidden sm:inline">Token Settings</span>
-                <span className="sm:hidden">Tokens</span>
-              </div>
-            </button>
-            <button
-              onClick={() => setActiveTab('about')}
-              className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 whitespace-nowrap ${activeTab === 'about'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm'
-                : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-200 hover:border-gray-300 dark:hover:border-dark-700'
-                }`}
-            >
-              <div className="flex items-center gap-1 sm:gap-2">
-                <Bot className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
-                About
-              </div>
-            </button>
-          </nav>
-        </div>
-
-        {/* Provider Tab Content */}
-        {activeTab === 'provider' && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8 animate-fadeInSlide">
-            {/* Provider Configuration */}
-            <div className="space-y-4 sm:space-y-6">
-              <div className="bg-white dark:bg-dark-900 rounded-lg shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl transform hover:scale-[1.02]">
-                <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-dark-100 mb-3 sm:mb-4 transition-colors duration-300">
-                  Provider Configuration
-                </h2>
-
-                <div className="space-y-3 sm:space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-dark-200 mb-2 transition-colors duration-300">
-                      AI Provider
-                    </label>
-                    <select
-                      value={tempSelectedProviderName}
-                      onChange={(e) => switchProvider(e.target.value)}
-                      className="w-full px-3 py-2.5 sm:py-2 text-sm border border-gray-300 dark:border-dark-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-dark-850 text-gray-900 dark:text-dark-100 transition-all duration-200 focus:scale-[1.02] hover:border-blue-400"
-                    >
-                      {Object.keys(PROVIDER_URLS).map((providerName) => (
-                        <option key={providerName} value={providerName}>
-                          {providerName.replace(' (Free Models)', '')}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-dark-200 mb-2 transition-colors duration-300">
-                      API Key
-                    </label>
-                    <input
-                      type="password"
-                      value={tempApiKey}
-                      onChange={(e) => setTempApiKey(e.target.value)}
-                      placeholder="Enter your API key"
-                      className="w-full px-3 py-2.5 sm:py-2 text-sm border border-gray-300 dark:border-dark-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-dark-850 text-gray-900 dark:text-dark-100 placeholder-gray-500 dark:placeholder-dark-400 transition-all duration-200 focus:scale-[1.02] hover:border-blue-400"
-                    />
-                  </div>
-
-                  {tempSelectedProviderName === 'Custom API URL' && (
-                    <div className="animate-fadeInSlide">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-dark-200 mb-2 transition-colors duration-300">
-                        Custom API URL
-                      </label>
-                      <input
-                        type="url"
-                        value={tempCustomApiUrl}
-                        onChange={(e) => setTempCustomApiUrl(e.target.value)}
-                        placeholder="https://your-api-endpoint.com/v1/chat/completions"
-                        className="w-full px-3 py-2.5 sm:py-2 text-sm border border-gray-300 dark:border-dark-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-dark-850 text-gray-900 dark:text-dark-100 placeholder-gray-500 dark:placeholder-dark-400 transition-all duration-200 focus:scale-[1.02] hover:border-blue-400"
-                      />
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-dark-200 mb-2 transition-colors duration-300">
-                      API Endpoint
-                    </label>
-                    <div className="px-3 py-2.5 sm:py-2 text-sm bg-gray-100 dark:bg-dark-800 rounded-md text-gray-600 dark:text-dark-300 font-mono transition-all duration-300 hover:bg-gray-200 dark:hover:bg-dark-750 break-all">
-                      {getApiUrl() || 'Not configured'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Provider Help & Stats */}
-            <div className="space-y-4 sm:space-y-6">
-              <div className="bg-white dark:bg-dark-900 rounded-lg shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl transform hover:scale-[1.02]">
-                <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-dark-100 mb-3 sm:mb-4 transition-colors duration-300">
-                  🔑 Get Your API Key
-                </h3>
-
-                {tempSelectedProviderName === 'OpenRouter' && (
-                  <div className="space-y-3">
-                    <p className="text-sm text-gray-600 dark:text-dark-400">
-                      🌐 Access to 100+ AI models + $1 free credit
-                    </p>
-                    <div className="space-y-2">
-                      <a
-                        href="https://openrouter.ai/keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium transition-colors w-full justify-center"
-                      >
-                        <Key className="w-4 h-4" />
-                        Get API Key
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                      <a
-                        href="https://openrouter.ai/docs/quick-start"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-dark-800 text-gray-700 dark:text-dark-300 rounded-md hover:bg-gray-200 dark:hover:bg-dark-750 text-sm transition-colors w-full justify-center"
-                      >
-                        📚 Documentation
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-dark-400">
-                      💡 Free models available + $1 bonus credit for premium models
-                    </div>
-                  </div>
-                )}
-
-                {tempSelectedProviderName === 'Together AI' && (
-                  <div className="space-y-3">
-                    <p className="text-sm text-gray-600 dark:text-dark-400">
-                      🚀 Fast inference with top open-source models
-                    </p>
-                    <div className="space-y-2">
-                      <a
-                        href="https://api.together.xyz/settings/api-keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium transition-colors w-full justify-center"
-                      >
-                        <Key className="w-4 h-4" />
-                        Get API Key
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                      <a
-                        href="https://docs.together.ai/docs/quickstart"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-dark-800 text-gray-700 dark:text-dark-300 rounded-md hover:bg-gray-200 dark:hover:bg-dark-750 text-sm transition-colors w-full justify-center"
-                      >
-                        📚 Documentation
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-dark-400">
-                      ⚡ Competitive pricing • Best open-source models
-                    </div>
-                  </div>
-                )}
-
-                {tempSelectedProviderName === 'Groq' && (
-                  <div className="space-y-3">
-                    <p className="text-sm text-gray-600 dark:text-dark-400">
-                      🆓 Ultra-fast inference • 14,400 free requests/day
-                    </p>
-                    <div className="space-y-2">
-                      <a
-                        href="https://console.groq.com/keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-sm font-medium transition-colors w-full justify-center"
-                      >
-                        <Key className="w-4 h-4" />
-                        Get API Key
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                      <a
-                        href="https://console.groq.com/docs/quickstart"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-dark-800 text-gray-700 dark:text-dark-300 rounded-md hover:bg-gray-200 dark:hover:bg-dark-750 text-sm transition-colors w-full justify-center"
-                      >
-                        📚 Documentation
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-dark-400">
-                      ⚡ Fastest inference available • Generous free tier
-                    </div>
-                  </div>
-                )}
-
-                {tempSelectedProviderName === 'Custom API URL' && (
-                  <div className="space-y-3">
-                    <p className="text-sm text-gray-600 dark:text-dark-400">
-                      Connect to your own OpenAI-compatible API endpoint
-                    </p>
-                    <div className="text-xs text-gray-500 dark:text-dark-400">
-                      🔧 Use your own OpenAI-compatible API endpoint. Make sure to include the full URL path to the chat completions endpoint.
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-white dark:bg-dark-900 rounded-lg shadow p-6">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4">
-                  Provider Statistics
-                </h2>
-
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">Total Models</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
-                      {availableModels.length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">Free Models</span>
-                    <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                      {availableModels.filter(m => m.id.toLowerCase().includes('free') || (m.description?.toLowerCase().includes('free') ?? false)).length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">With Reasoning</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
-                      {availableModels.filter(m => m.supportsReasoning).length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">With Vision</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
-                      {availableModels.filter(m => m.supportsImages).length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">Web Search</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
-                      {availableModels.filter(m => m.supportsWebSearch).length}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-blue-50 dark:bg-dark-900 rounded-lg p-4 border border-blue-200 dark:border-dark-800">
-                <h4 className="text-sm font-medium text-blue-800 dark:text-dark-200 mb-2">
-                  💡 Quick Setup Tips
-                </h4>
-                <div className="text-xs text-blue-700 dark:text-dark-300 space-y-1">
-                  <div>• <strong>Fastest setup:</strong> Groq (sign up → get key → paste)</div>
-                  <div>• <strong>Most models:</strong> OpenRouter (100+ models + free options + $1 credit)</div>
-                  <div>• <strong>Open source focus:</strong> Together AI (fast inference, competitive pricing)</div>
-                  <div>• <strong>Custom endpoints:</strong> Use your own OpenAI-compatible API</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Models Tab Content */}
-        {activeTab === 'models' && (
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8 animate-fadeInSlide">
-            {/* Model Selection - Takes 2 columns on desktop */}
-            <div className="xl:col-span-2">
-              <div className="bg-white dark:bg-dark-900 rounded-lg shadow-lg transition-all duration-300 hover:shadow-xl">
-                {/* Header */}
-                <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-dark-800 transition-colors duration-300">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3 sm:gap-0">
+    return (
+        <div className="min-h-screen bg-gray-50 dark:bg-dark-950">
+            {/* Sticky header */}
+            <div className="sticky top-0 z-10 bg-white dark:bg-dark-950 border-b border-gray-200 dark:border-dark-800">
+                <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-dark-100 transition-colors duration-300">
-                        Available Models
-                      </h2>
-                      <span className="px-2 py-1 bg-gray-100 dark:bg-dark-800 text-gray-600 dark:text-dark-400 text-xs rounded-full transition-all duration-300 animate-pulse">
-                        {filteredModels.length} models
-                      </span>
+                        <Link href="/" className="p-2 text-gray-500 hover:text-gray-700 dark:text-dark-400 dark:hover:text-dark-200 hover:bg-gray-100 dark:hover:bg-dark-800 rounded-lg transition-colors">
+                            <ArrowLeft className="w-5 h-5" />
+                        </Link>
+                        <div>
+                            <h1 className="text-base font-bold text-gray-900 dark:text-dark-100">Settings</h1>
+                            {isDirty && <p className="text-xs text-orange-500">Unsaved changes</p>}
+                        </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {isLoadingModels && (
-                        <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-blue-600" />
-                      )}
-                      <div className="flex border border-gray-300 dark:border-dark-800 rounded-md transition-colors duration-300">
-                        <button
-                          onClick={() => setViewMode('list')}
-                          className={`p-2 text-sm transition-all duration-200 hover:scale-105 ${viewMode === 'list'
-                            ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-                            : 'text-gray-600 dark:text-dark-400 hover:bg-gray-100 dark:hover:bg-dark-800'
-                            }`}
-                        >
-                          <List className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
+                        <button onClick={handleReset} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-dark-200 hover:bg-gray-100 dark:hover:bg-dark-800 rounded-lg transition-colors" title="Reset to defaults">
+                            <RotateCcw className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => setViewMode('grid')}
-                          className={`p-2 text-sm border-l border-gray-300 dark:border-dark-800 transition-all duration-200 hover:scale-105 ${viewMode === 'grid'
-                            ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-                            : 'text-gray-600 dark:text-dark-400 hover:bg-gray-100 dark:hover:bg-dark-800'
-                            }`}
-                        >
-                          <Grid className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-200" />
+                        <button onClick={handleSave} disabled={!isDirty} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${isDirty ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-100 dark:bg-dark-800 text-gray-400 dark:text-dark-500 cursor-not-allowed'}`}>
+                            {saveStatus === 'saving' ? <RefreshCw className="w-4 h-4 animate-spin" /> : saveStatus === 'saved' ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                            {saveStatus === 'saved' ? 'Saved!' : 'Save'}
                         </button>
-                      </div>
                     </div>
-                  </div>
-
-                  {/* Search Bar */}
-                  <div className="relative mb-4">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-3 h-3 sm:w-4 sm:h-4 transition-colors duration-200" />
-                    <input
-                      type="text"
-                      placeholder="Search models by name, ID, or description..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-8 sm:pl-10 pr-4 py-2.5 sm:py-2 text-sm border border-gray-300 dark:border-dark-800 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-dark-850 text-gray-900 dark:text-dark-100 placeholder-gray-500 dark:placeholder-dark-400 transition-all duration-200 focus:scale-[1.02] hover:border-blue-400"
-                    />
-                    {searchQuery && (
-                      <button
-                        onClick={() => setSearchQuery('')}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-all duration-200 hover:scale-110 p-1"
-                      >
-                        <X className="w-3 h-3 sm:w-4 sm:h-4" />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Filters - Mobile Optimized */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center gap-2 mb-2 sm:mb-0">
-                      <Filter className="w-3 h-3 sm:w-4 sm:h-4 text-gray-500 dark:text-dark-400 transition-colors duration-200" />
-                      <span className="text-xs sm:text-sm text-gray-500 dark:text-dark-400 transition-colors duration-200">Filter:</span>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => toggleFilter('reasoning')}
-                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${selectedFilters.includes('reasoning')
-                          ? 'bg-purple-100 text-purple-700 dark:bg-dark-800 dark:text-purple-300 shadow-md'
-                          : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
-                          }`}
-                      >
-                        <Brain className="w-3 h-3 transition-transform duration-200" />
-                        <span className="hidden xs:inline">Reasoning</span>
-                      </button>
-
-                      <button
-                        onClick={() => toggleFilter('vision')}
-                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${selectedFilters.includes('vision')
-                          ? 'bg-green-100 text-green-700 dark:bg-dark-800 dark:text-green-300 shadow-md'
-                          : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
-                          }`}
-                      >
-                        <ImageIcon className="w-3 h-3 transition-transform duration-200" />
-                        <span className="hidden xs:inline">Vision</span>
-                      </button>
-
-                      <button
-                        onClick={() => toggleFilter('search')}
-                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${selectedFilters.includes('search')
-                          ? 'bg-blue-100 text-blue-700 dark:bg-dark-800 dark:text-blue-300 shadow-md'
-                          : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
-                          }`}
-                      >
-                        <Search className="w-3 h-3 transition-transform duration-200" />
-                        <span className="hidden xs:inline">Web Search</span>
-                      </button>
-
-                      <button
-                        onClick={() => toggleFilter('free')}
-                        className={`inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 transform hover:scale-105 ${selectedFilters.includes('free')
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 shadow-md'
-                          : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400 hover:bg-gray-200 dark:hover:bg-dark-750'
-                          }`}
-                      >
-                        <Sparkles className="w-3 h-3 transition-transform duration-200" />
-                        <span className="hidden xs:inline">Free</span>
-                      </button>
-
-                      {(searchQuery || selectedFilters.length > 0) && (
-                        <button
-                          onClick={clearFilters}
-                          className="inline-flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 transition-all duration-200 transform hover:scale-105 animate-fadeIn"
-                        >
-                          <X className="w-3 h-3 transition-transform duration-200" />
-                          <span className="hidden xs:inline">Clear</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
                 </div>
-
-                {/* Models Display */}
-                <div className="p-4 sm:p-6">
-                  {modelsError && (
-                    <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-                      <p className="text-sm text-red-800 dark:text-red-200">{modelsError}</p>
+                <div className="max-w-4xl mx-auto px-4">
+                    <div className="flex items-center gap-0 overflow-x-auto scrollbar-hide">
+                        {TABS.map(tab => (
+                            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === tab.id ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-600 dark:text-dark-400 hover:text-gray-900 dark:hover:text-dark-200'}`}>
+                                {tab.icon}{tab.label}
+                            </button>
+                        ))}
                     </div>
-                  )}
+                </div>
+            </div>
 
-                  {filteredModels.length === 0 ? (
-                    <div className="text-center py-8">
-                      <div className="text-gray-400 mb-2">
-                        <Search className="w-8 h-8 mx-auto" />
-                      </div>
-                      <p className="text-gray-500 dark:text-dark-400 text-sm">
-                        {searchQuery || selectedFilters.length > 0
-                          ? 'No models match your search criteria'
-                          : 'No models available'
-                        }
-                      </p>
-                      {(searchQuery || selectedFilters.length > 0) && (
-                        <button
-                          onClick={clearFilters}
-                          className="mt-2 text-blue-600 dark:text-blue-400 text-sm hover:underline"
-                        >
-                          Clear filters
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className={viewMode === 'grid'
-                      ? 'grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4'
-                      : 'space-y-3'
-                    }>
-                      {filteredModels.map((model) => (
-                        <div
-                          key={model.id}
-                          onClick={() => {
-                            setTempSelectedModel(model.id); // Only update temp selection
-                          }}
-                          className={`p-3 sm:p-4 rounded-lg border-2 cursor-pointer transition-all duration-300 relative transform hover:scale-[1.02] hover:shadow-lg tap-highlight-none ${tempSelectedModel === model.id
-                            ? 'border-blue-500 bg-blue-50 dark:bg-dark-800 shadow-md scale-[1.01]'
-                            : 'border-gray-200 dark:border-dark-700 hover:border-gray-300 dark:hover:border-dark-600 hover:shadow-sm'
-                            }`}
-                        >
-                          {/* Currently active model indicator */}
-                          {selectedModel === model.id && (
-                            <div className="absolute top-2 right-2 animate-pulse">
-                              <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded-full border-2 border-white shadow-sm animate-ping"></div>
+            <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+
+                {/* API TAB */}
+                {activeTab === 'api' && (
+                    <>
+                        <div className="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-5">
+                            <h2 className="text-sm font-semibold text-gray-900 dark:text-dark-100 mb-4">API Provider</h2>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+                                {Object.keys(PROVIDER_URLS).map(p => (
+                                    <button key={p} onClick={() => { updateLocal('providerName', p); updateLocal('providerUrl', PROVIDER_URLS[p] || ''); }} className={`p-2.5 rounded-lg border text-xs font-medium transition-all ${localSettings.providerName === p ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-dark-700 text-gray-700 dark:text-dark-200 hover:border-gray-300'}`}>
+                                        {p}
+                                    </button>
+                                ))}
                             </div>
-                          )}
-
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start gap-2">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <h3 className="font-medium text-gray-900 dark:text-dark-100 text-sm leading-tight transition-colors duration-200">
-                                      {model.name.replace(' (Free)', '').replace('(Free Tier)', '').split(' ').slice(0, 3).join(' ')}
-                                      {model.name.split(' ').length > 3 && '...'}
-                                    </h3>
-                                    {(model.id.toLowerCase().includes('free') || (model.description?.toLowerCase().includes('free') ?? false)) && (
-                                      <span className="px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs rounded font-medium animate-pulse">
-                                        FREE
-                                      </span>
-                                    )}
-                                    {selectedModel === model.id && (
-                                      <span className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded font-medium animate-bounce">
-                                        ACTIVE
-                                      </span>
-                                    )}
-                                  </div>
+                            {localSettings.providerName === 'Custom API URL' && (
+                                <input type="url" value={localSettings.providerUrl} onChange={(e) => updateLocal('providerUrl', e.target.value)} placeholder="https://your-api.com/v1/chat/completions" className="w-full px-3 py-2 border border-gray-300 dark:border-dark-700 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-dark-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+                            )}
+                            <label className="block text-sm font-medium text-gray-700 dark:text-dark-200 mb-1.5">
+                                API Key
+                                <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="ml-2 text-blue-500 hover:text-blue-600 text-xs inline-flex items-center gap-1">Get key <ExternalLink className="w-3 h-3" /></a>
+                            </label>
+                            <div className="relative mb-4">
+                                <input type={showApiKey ? 'text' : 'password'} value={localSettings.apiKey} onChange={(e) => updateLocal('apiKey', e.target.value)} placeholder="sk-or-v1-..." className="w-full px-3 py-2 pr-20 border border-gray-300 dark:border-dark-700 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-dark-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                    <button onClick={() => setShowApiKey(!showApiKey)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">{showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button>
+                                    {localSettings.apiKey && <button onClick={() => navigator.clipboard.writeText(localSettings.apiKey)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><Copy className="w-4 h-4" /></button>}
                                 </div>
-                                {tempSelectedModel === model.id && (
-                                  <div className="flex-shrink-0 animate-fadeIn">
-                                    <div className="w-4 h-4 sm:w-5 sm:h-5 bg-blue-600 rounded-full flex items-center justify-center transition-all duration-200 animate-bounce">
-                                      <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button onClick={testApiKey} disabled={!localSettings.apiKey || apiTestStatus === 'testing'} className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-dark-800 hover:bg-gray-200 dark:hover:bg-dark-700 text-gray-700 dark:text-dark-200 rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+                                    {apiTestStatus === 'testing' ? <RefreshCw className="w-4 h-4 animate-spin" /> : apiTestStatus === 'success' ? <CheckCircle className="w-4 h-4 text-green-500" /> : apiTestStatus === 'error' ? <AlertCircle className="w-4 h-4 text-red-500" /> : <Zap className="w-4 h-4" />}
+                                    Test Connection
+                                </button>
+                                {apiTestMessage && <span className={`text-sm ${apiTestStatus === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{apiTestMessage}</span>}
+                            </div>
+                        </div>
+
+                        <div className="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-5">
+                            <h2 className="text-sm font-semibold text-gray-900 dark:text-dark-100 mb-2">Default System Prompt</h2>
+                            <p className="text-xs text-gray-500 dark:text-dark-400 mb-3">Instructions given to the AI at the start of every conversation.</p>
+                            <textarea value={localSettings.systemPrompt} onChange={(e) => updateLocal('systemPrompt', e.target.value)} placeholder="You are a helpful AI assistant..." rows={5} className="w-full px-3 py-2 border border-gray-300 dark:border-dark-700 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-dark-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y" />
+                            <div className="flex justify-between mt-1">
+                                <span className="text-xs text-gray-400">{localSettings.systemPrompt.length} chars</span>
+                                <button onClick={() => updateLocal('systemPrompt', '')} className="text-xs text-red-500 hover:text-red-600">Clear</button>
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {/* MODELS TAB */}
+                {activeTab === 'models' && (
+                    <div className="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-5">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h2 className="text-sm font-semibold text-gray-900 dark:text-dark-100">Model Selection</h2>
+                                <p className="text-xs text-gray-500 dark:text-dark-400 mt-0.5">{localSettings.selectedModel ? `Selected: ${models.find(m => m.id === localSettings.selectedModel)?.name || localSettings.selectedModel}` : 'No model selected'}</p>
+                            </div>
+                            <button onClick={loadModels} disabled={modelsLoading} className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+                                <RefreshCw className={`w-4 h-4 ${modelsLoading ? 'animate-spin' : ''}`} />
+                                {modelsLoading ? 'Loading...' : models.length > 0 ? 'Refresh' : 'Load Models'}
+                            </button>
+                        </div>
+                        {modelsError && <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg mb-4"><AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" /><p className="text-sm text-red-700 dark:text-red-300">{modelsError}</p></div>}
+                        {models.length > 0 && (
+                            <>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <div className="relative flex-1">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                        <input type="text" value={modelSearch} onChange={(e) => setModelSearch(e.target.value)} placeholder="Search models..." className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-dark-700 rounded-lg bg-white dark:bg-dark-800 text-sm text-gray-900 dark:text-dark-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                                     </div>
-                                  </div>
-                                )}
-                              </div>
-                              <p className="text-xs text-gray-500 dark:text-dark-400 mt-1 font-mono transition-colors duration-200 truncate">
-                                {model.id}
-                              </p>
-                              <p className="text-xs text-gray-600 dark:text-dark-400 mt-1 line-clamp-2 transition-colors duration-200">
-                                {model.description}
-                              </p>
-                              {!(model.id.toLowerCase().includes('free') || (model.description?.toLowerCase().includes('free') ?? false)) && model.pricing && (
-                                <p className="text-xs text-gray-500 dark:text-dark-500 mt-1 transition-colors duration-200">
-                                  ${model.pricing.prompt.toFixed(4)} / ${model.pricing.completion.toFixed(4)} per 1K tokens
-                                </p>
-                              )}
-                              <div className="flex gap-1 mt-2 flex-wrap">
-                                {model.supportsReasoning && (
-                                  <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs rounded transition-all duration-200 hover:scale-105">
-                                    <Brain className="w-2.5 h-2.5 sm:w-3 sm:h-3 transition-transform duration-200" />
-                                    <span className="hidden sm:inline">{viewMode === 'list' && 'Reasoning'}</span>
-                                  </span>
-                                )}
-                                {model.supportsImages && (
-                                  <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded transition-all duration-200 hover:scale-105">
-                                    <ImageIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3 transition-transform duration-200" />
-                                    <span className="hidden sm:inline">{viewMode === 'list' && 'Vision'}</span>
-                                  </span>
-                                )}
-                                <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-blue-100 dark:bg-dark-800 text-blue-700 dark:text-blue-300 text-xs rounded transition-all duration-200 hover:scale-105">
-                                  <Search className="w-2.5 h-2.5 sm:w-3 sm:h-3 transition-transform duration-200" />
-                                  <span className="hidden sm:inline">{viewMode === 'list' && 'Web Search'}</span>
-                                </span>
-                              </div>
+                                    <div className="flex items-center gap-1 flex-wrap">
+                                        {(['all', 'free', 'vision', 'tools', 'reasoning'] as const).map(f => (
+                                            <button key={f} onClick={() => setModelFilter(f)} className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${modelFilter === f ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-dark-800 text-gray-600 dark:text-dark-300 hover:bg-gray-200 dark:hover:bg-dark-700'}`}>
+                                                {f === 'all' ? `All (${models.length})` : f.charAt(0).toUpperCase() + f.slice(1)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5 max-h-[500px] overflow-y-auto">
+                                    {filteredModels.length === 0 ? (
+                                        <p className="text-center text-sm text-gray-500 py-8">No models match your filter</p>
+                                    ) : filteredModels.map(model => (
+                                        <button key={model.id} onClick={() => updateLocal('selectedModel', model.id)} className={`w-full flex items-start gap-3 p-3 rounded-lg border transition-all text-left ${localSettings.selectedModel === model.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-dark-700 hover:border-gray-300 dark:hover:border-dark-600 hover:bg-gray-50 dark:hover:bg-dark-800'}`}>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100 truncate">{model.name}</span>
+                                                    {model.isFree && <span className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs rounded font-medium">Free</span>}
+                                                    {model.supportsReasoning && <span className="px-1.5 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 text-xs rounded" title="Reasoning"><Zap className="w-3 h-3 inline" /></span>}
+                                                    {model.supportsImages && <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 text-xs rounded" title="Vision"><ImageIcon className="w-3 h-3 inline" /></span>}
+                                                    {model.supportsTools && <span className="px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 text-xs rounded" title="Tools"><Wrench className="w-3 h-3 inline" /></span>}
+                                                </div>
+                                                <p className="text-xs text-gray-400 dark:text-dark-500 mt-0.5 truncate">{model.id}</p>
+                                                {model.contextLength && <p className="text-xs text-gray-400 mt-0.5">{(model.contextLength / 1000).toFixed(0)}K ctx{model.pricing ? ` · $${(model.pricing.prompt * 1000000).toFixed(2)}/M` : ''}</p>}
+                                            </div>
+                                            {localSettings.selectedModel === model.id && <Check className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+
+                {/* PARAMETERS TAB */}
+                {activeTab === 'parameters' && (
+                    <div className="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-5 space-y-6">
+                        <h2 className="text-sm font-semibold text-gray-900 dark:text-dark-100">Generation Parameters</h2>
+                        {[
+                            { key: 'temperature' as const, label: 'Temperature', min: 0, max: 2, step: 0.05, desc: 'Controls randomness: 0=precise, 2=creative' },
+                            { key: 'maxTokens' as const, label: 'Max Tokens', min: 256, max: 32768, step: 256, desc: 'Maximum tokens in response' },
+                            { key: 'topP' as const, label: 'Top P', min: 0.1, max: 1, step: 0.05, desc: 'Nucleus sampling probability' },
+                        ].map(param => (
+                            <div key={param.key}>
+                                <div className="flex items-center justify-between mb-2">
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-700 dark:text-dark-200">{param.label}</label>
+                                        <p className="text-xs text-gray-400 dark:text-dark-500">{param.desc}</p>
+                                    </div>
+                                    <span className="text-sm font-mono text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded">
+                                        {param.key === 'maxTokens' ? (localSettings[param.key] as number).toLocaleString() : (localSettings[param.key] as number).toFixed(2)}
+                                    </span>
+                                </div>
+                                <input type="range" min={param.min} max={param.max} step={param.step} value={localSettings[param.key] as number} onChange={(e) => updateLocal(param.key, param.key === 'maxTokens' ? parseInt(e.target.value) : parseFloat(e.target.value))} className="w-full accent-blue-600" />
                             </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Model Details Sidebar */}
-            <div className="space-y-4 sm:space-y-6">
-              {tempSelectedModel && (
-                <div className="bg-white dark:bg-dark-900 rounded-lg shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl transform hover:scale-[1.02]">
-                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-dark-100 mb-3 sm:mb-4 transition-colors duration-300">
-                    Selected Model {tempSelectedModel !== selectedModel && (
-                      <span className="text-xs sm:text-sm text-orange-600 dark:text-orange-400 font-normal">
-                        (Not saved yet)
-                      </span>
-                    )}
-                  </h2>
-
-                  {(() => {
-                    const model = availableModels.find(m => m.id === tempSelectedModel);
-                    if (!model) return null;
-
-                    return (
-                      <div className="space-y-4">
-                        <div>
-                          <h3 className="font-medium text-gray-900 dark:text-dark-100 text-lg">
-                            {model.name.replace(' (Free)', '').replace('(Free Tier)', '')}
-                          </h3>
-                          <p className="text-sm text-gray-600 dark:text-dark-400 mt-1">
-                            Model ID: <code className="bg-gray-100 dark:bg-dark-800 px-1 rounded">{model.id}</code>
-                          </p>
-                        </div>
-
-                        <div>
-                          <h4 className="font-medium text-gray-900 dark:text-dark-100 mb-2">Description</h4>
-                          <p className="text-sm text-gray-600 dark:text-dark-400">
-                            {model.description}
-                          </p>
-                        </div>
-
-                        <div>
-                          <h4 className="font-medium text-gray-900 dark:text-dark-100 mb-2">Capabilities</h4>
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <Brain className={`w-4 h-4 ${model.supportsReasoning ? 'text-green-600' : 'text-gray-400'}`} />
-                              <span className={`text-sm ${model.supportsReasoning ? 'text-green-600' : 'text-gray-400'}`}>
-                                Advanced Reasoning
-                              </span>
+                        ))}
+                        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-dark-800 rounded-lg">
+                            <div>
+                                <p className="text-sm font-medium text-gray-700 dark:text-dark-200">Streaming Responses</p>
+                                <p className="text-xs text-gray-500 dark:text-dark-400">Show response as it generates</p>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <ImageIcon className={`w-4 h-4 ${model.supportsImages ? 'text-green-600' : 'text-gray-400'}`} />
-                              <span className={`text-sm ${model.supportsImages ? 'text-green-600' : 'text-gray-400'}`}>
-                                Image Analysis
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Search className={`w-4 h-4 ${model.supportsWebSearch ? 'text-green-600' : 'text-gray-400'}`} />
-                              <span className={`text-sm ${model.supportsWebSearch ? 'text-green-600' : 'text-gray-400'}`}>
-                                Web Search
-                              </span>
-                            </div>
-                          </div>
+                            <button onClick={() => updateLocal('streamingEnabled', !localSettings.streamingEnabled)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${localSettings.streamingEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-dark-600'}`}>
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${localSettings.streamingEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                            </button>
                         </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-
-              {/* Filtered Stats */}
-              <div className="bg-white dark:bg-dark-900 rounded-lg shadow p-6">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4">
-                  Search Results
-                </h2>
-
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">Showing</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
-                      {filteredModels.length} / {availableModels.length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">Free Models</span>
-                    <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                      {filteredModels.filter(m => m.id.toLowerCase().includes('free') || (m.description?.toLowerCase().includes('free') ?? false)).length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">With Reasoning</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
-                      {filteredModels.filter(m => m.supportsReasoning).length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">With Vision</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
-                      {filteredModels.filter(m => m.supportsImages).length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">Web Search</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">
-                      {filteredModels.filter(m => m.supportsWebSearch).length}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Token Settings Tab Content */}
-        {activeTab === 'tokens' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fadeInSlide">
-            {/* Token Configuration */}
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-dark-900 rounded-lg shadow-lg p-6 transition-all duration-300 hover:shadow-xl transform hover:scale-[1.02]">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4 transition-colors duration-300">
-                  Response Length Settings
-                </h2>
-
-                <div className="space-y-6">
-                  <div>
-                    <div className="flex items-center gap-3 mb-4">
-                      <input
-                        type="checkbox"
-                        id="adaptive-tokens"
-                        checked={tempUseAdaptiveTokens}
-                        onChange={(e) => setTempUseAdaptiveTokens(e.target.checked)}
-                        className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-dark-800 border-gray-300 dark:border-dark-700 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-dark-900 focus:ring-2 transition-all duration-200 transform hover:scale-110"
-                      />
-                      <label htmlFor="adaptive-tokens" className="text-sm font-medium text-gray-700 dark:text-dark-200 transition-colors duration-300 cursor-pointer">
-                        Smart Token Management (Recommended)
-                      </label>
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-dark-400 ml-7 transition-colors duration-300">
-                      Automatically adjusts response length based on your input length and model context limits
-                    </p>
-                  </div>
+                )}
 
-                  <div className={`space-y-4 transition-all duration-300 ${tempUseAdaptiveTokens ? 'opacity-50' : ''}`}>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-dark-200 mb-2 transition-colors duration-300">
-                        Maximum Response Length (tokens)
-                      </label>
-                      <input
-                        type="number"
-                        value={tempMaxTokens}
-                        onChange={(e) => setTempMaxTokens(parseInt(e.target.value) || 500)}
-                        disabled={tempUseAdaptiveTokens}
-                        placeholder="Enter number of tokens"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-dark-850 text-gray-900 dark:text-dark-100 placeholder-gray-500 dark:placeholder-dark-400 disabled:opacity-50 transition-all duration-200 focus:scale-[1.02] hover:border-blue-400"
-                      />
+                {/* PERSONAS TAB */}
+                {activeTab === 'personas' && (
+                    <div className="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-5">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h2 className="text-sm font-semibold text-gray-900 dark:text-dark-100">AI Personas</h2>
+                                <p className="text-xs text-gray-500 dark:text-dark-400 mt-0.5">Custom AI personalities and system prompts</p>
+                            </div>
+                            <button onClick={() => { setEditingPersona({ icon: '🤖' }); setShowPersonaForm(true); }} className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors">
+                                <Plus className="w-4 h-4" />New
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {[...PERSONAS, ...(localSettings.personas?.filter(p => p.isCustom) || [])].map(persona => (
+                                <div key={persona.id} onClick={() => { updateLocal('activePersonaId', persona.id); updateLocal('systemPrompt', persona.systemPrompt); }} className={`p-4 rounded-lg border cursor-pointer transition-all ${localSettings.activePersonaId === persona.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-dark-700 hover:border-gray-300 dark:hover:border-dark-600'}`}>
+                                    <div className="flex items-start justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xl">{persona.icon}</span>
+                                            <div>
+                                                <p className="text-sm font-semibold text-gray-900 dark:text-dark-100">{persona.name}</p>
+                                                <p className="text-xs text-gray-500 dark:text-dark-400">{persona.description}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            {localSettings.activePersonaId === persona.id && <Check className="w-4 h-4 text-blue-600" />}
+                                            {persona.isCustom && (
+                                                <button onClick={(e) => { e.stopPropagation(); setEditingPersona(persona); setShowPersonaForm(true); }} className="p-1 text-gray-400 hover:text-gray-600 rounded">
+                                                    <Edit3 className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-gray-400 dark:text-dark-500 mt-2 line-clamp-2">{persona.systemPrompt}</p>
+                                </div>
+                            ))}
+                        </div>
+                        {showPersonaForm && editingPersona && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                                <div className="bg-white dark:bg-dark-900 rounded-2xl shadow-2xl p-6 max-w-lg w-full mx-4 border border-gray-200 dark:border-dark-700">
+                                    <h3 className="text-base font-bold text-gray-900 dark:text-dark-100 mb-4">{editingPersona.id ? 'Edit Persona' : 'New Persona'}</h3>
+                                    <div className="space-y-3">
+                                        <div className="flex items-center gap-3">
+                                            <input type="text" value={editingPersona.icon || ''} onChange={(e) => setEditingPersona(prev => ({ ...prev, icon: e.target.value }))} placeholder="🤖" className="w-16 px-3 py-2 border border-gray-300 dark:border-dark-700 rounded-lg bg-white dark:bg-dark-800 text-center text-2xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                            <input type="text" value={editingPersona.name || ''} onChange={(e) => setEditingPersona(prev => ({ ...prev, name: e.target.value }))} placeholder="Persona name" className="flex-1 px-3 py-2 border border-gray-300 dark:border-dark-700 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-dark-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                        </div>
+                                        <input type="text" value={editingPersona.description || ''} onChange={(e) => setEditingPersona(prev => ({ ...prev, description: e.target.value }))} placeholder="Short description" className="w-full px-3 py-2 border border-gray-300 dark:border-dark-700 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-dark-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                        <textarea value={editingPersona.systemPrompt || ''} onChange={(e) => setEditingPersona(prev => ({ ...prev, systemPrompt: e.target.value }))} placeholder="System prompt..." rows={5} className="w-full px-3 py-2 border border-gray-300 dark:border-dark-700 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-dark-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y" />
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-4">
+                                        <button onClick={handleSavePersona} disabled={!editingPersona.name || !editingPersona.systemPrompt} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 dark:disabled:bg-dark-700 text-white disabled:text-gray-400 rounded-lg text-sm font-medium transition-colors">Save</button>
+                                        <button onClick={() => { setShowPersonaForm(false); setEditingPersona(null); }} className="flex-1 py-2 bg-gray-100 dark:bg-dark-800 hover:bg-gray-200 dark:hover:bg-dark-700 text-gray-700 dark:text-dark-200 rounded-lg text-sm font-medium transition-colors">Cancel</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+                )}
 
-            {/* Token Information */}
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-dark-900 rounded-lg shadow-lg p-6 transition-all duration-300 hover:shadow-xl transform hover:scale-[1.02]">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4 transition-colors duration-300">
-                  💡 Understanding Tokens
-                </h3>
-
-                <div className="space-y-4 text-sm text-gray-600 dark:text-dark-400 transition-colors duration-300">
-                  <div>
-                    <h4 className="font-medium text-gray-900 dark:text-dark-100 mb-2 transition-colors duration-300">What are tokens?</h4>
-                    <p>Tokens are pieces of text that AI models process. Roughly:</p>
-                    <ul className="list-disc ml-5 mt-2 space-y-1">
-                      <li>1 token ≈ 4 characters</li>
-                      <li>1 token ≈ 0.75 words</li>
-                      <li>&quot;Hello world&quot; = ~3 tokens</li>
-                    </ul>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 dark:text-dark-100 mb-2 transition-colors duration-300">Response Length Guide</h4>
-                    <ul className="space-y-2">
-                      <li><strong>50-200 tokens:</strong> Brief answers (1-2 sentences)</li>
-                      <li><strong>200-500 tokens:</strong> Short explanations (1 paragraph)</li>
-                      <li><strong>500-1000 tokens:</strong> Detailed responses (2-3 paragraphs)</li>
-                      <li><strong>1000+ tokens:</strong> Comprehensive explanations</li>
-                    </ul>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 dark:text-dark-100 mb-2 transition-colors duration-300">Smart Token Management</h4>
-                    <p>When enabled, the system automatically:</p>
-                    <ul className="list-disc ml-5 mt-2 space-y-1">
-                      <li>Calculates your input length</li>
-                      <li>Adjusts output based on model limits</li>
-                      <li>Prevents context overflow errors</li>
-                      <li>Optimizes for complete responses</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* About Tab Content */}
-        {activeTab === 'about' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fadeInSlide">
-            {/* About Information */}
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-dark-900 rounded-lg shadow-lg p-6 transition-all duration-300 hover:shadow-xl transform hover:scale-[1.02]">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4 transition-colors duration-300">
-                  About RavenGPT
-                </h2>
-
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-dark-100 mb-2 transition-colors duration-300">
-                      Created by
-                    </h3>
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-dark-850 rounded-lg transition-all duration-300 hover:bg-gray-100 dark:hover:bg-dark-800">
-                      <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center transition-transform duration-300 hover:scale-110">
-                        <span className="text-white font-bold text-sm">W</span>
-                      </div>
-                      <div>
-                        <div className="font-medium text-gray-900 dark:text-dark-100 transition-colors duration-300">wh1sky02</div>
-                        <div className="text-sm text-gray-500 dark:text-dark-400 transition-colors duration-300">Developer</div>
-                      </div>
+                {/* MCP TAB */}
+                {activeTab === 'mcp' && (
+                    <div className="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-5">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h2 className="text-sm font-semibold text-gray-900 dark:text-dark-100">MCP Servers</h2>
+                                <p className="text-xs text-gray-500 dark:text-dark-400 mt-0.5">Model Context Protocol — extend AI with external tools</p>
+                            </div>
+                            <button onClick={() => setShowMCPForm(!showMCPForm)} className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors">
+                                <Plus className="w-4 h-4" />Add Server
+                            </button>
+                        </div>
+                        <div className="mb-4">
+                            <p className="text-xs font-semibold text-gray-500 dark:text-dark-400 uppercase tracking-wider mb-2">Quick Add Presets</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                {MCP_SERVER_PRESETS.map((preset, i) => (
+                                    <button key={i} onClick={() => handleAddPreset(preset)} className="p-3 border border-dashed border-gray-300 dark:border-dark-600 rounded-lg text-left hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all">
+                                        <p className="text-xs font-medium text-gray-700 dark:text-dark-200">{preset.name}</p>
+                                        <p className="text-xs text-gray-400 dark:text-dark-500 mt-0.5">{preset.description}</p>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        {showMCPForm && (
+                            <div className="mb-4 p-4 bg-gray-50 dark:bg-dark-800 rounded-lg border border-gray-200 dark:border-dark-700">
+                                <h3 className="text-sm font-semibold text-gray-900 dark:text-dark-100 mb-3">Add MCP Server</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <input type="text" value={newMCPServer.name || ''} onChange={(e) => setNewMCPServer(prev => ({ ...prev, name: e.target.value }))} placeholder="Server name" className="px-3 py-2 border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-900 text-sm text-gray-900 dark:text-dark-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                    <select value={newMCPServer.transport || 'sse'} onChange={(e) => setNewMCPServer(prev => ({ ...prev, transport: e.target.value as 'sse' | 'stdio' | 'websocket' }))} className="px-3 py-2 border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-900 text-sm text-gray-900 dark:text-dark-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        <option value="sse">SSE (HTTP)</option>
+                                        <option value="stdio">Stdio (Local)</option>
+                                        <option value="websocket">WebSocket</option>
+                                    </select>
+                                    <input type="text" value={newMCPServer.url || ''} onChange={(e) => setNewMCPServer(prev => ({ ...prev, url: e.target.value }))} placeholder="Server URL or command" className="sm:col-span-2 px-3 py-2 border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-900 text-sm text-gray-900 dark:text-dark-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                    <input type="text" value={newMCPServer.description || ''} onChange={(e) => setNewMCPServer(prev => ({ ...prev, description: e.target.value }))} placeholder="Description (optional)" className="px-3 py-2 border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-900 text-sm text-gray-900 dark:text-dark-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                    <input type="password" value={newMCPServer.apiKey || ''} onChange={(e) => setNewMCPServer(prev => ({ ...prev, apiKey: e.target.value }))} placeholder="API key (optional)" className="px-3 py-2 border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-900 text-sm text-gray-900 dark:text-dark-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                </div>
+                                <div className="flex items-center gap-2 mt-3">
+                                    <button onClick={handleAddMCPServer} disabled={!newMCPServer.name || !newMCPServer.url} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 dark:disabled:bg-dark-700 text-white disabled:text-gray-400 rounded-lg text-sm font-medium transition-colors">Add</button>
+                                    <button onClick={() => setShowMCPForm(false)} className="px-4 py-2 bg-gray-100 dark:bg-dark-700 text-gray-700 dark:text-dark-200 rounded-lg text-sm font-medium transition-colors">Cancel</button>
+                                </div>
+                            </div>
+                        )}
+                        {settings.mcpServers.length === 0 ? (
+                            <div className="text-center py-8">
+                                <Server className="w-8 h-8 text-gray-300 dark:text-dark-600 mx-auto mb-3" />
+                                <p className="text-sm text-gray-500 dark:text-dark-400">No MCP servers configured</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {settings.mcpServers.map(server => (
+                                    <div key={server.id} className="flex items-center gap-3 p-3 border border-gray-200 dark:border-dark-700 rounded-lg">
+                                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${server.status === 'connected' ? 'bg-green-500' : server.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : server.status === 'error' ? 'bg-red-500' : 'bg-gray-400'}`} />
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-gray-900 dark:text-dark-100">{server.name}</p>
+                                            <p className="text-xs text-gray-400 dark:text-dark-500 truncate">{server.url}</p>
+                                            {server.lastError && <p className="text-xs text-red-500 mt-0.5">{server.lastError}</p>}
+                                            {server.tools && server.tools.length > 0 && <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">{server.tools.length} tools available</p>}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={() => updateMCPServer(server.id, { enabled: !server.enabled })} className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${server.enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-dark-600'}`}>
+                                                <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${server.enabled ? 'translate-x-5' : 'translate-x-1'}`} />
+                                            </button>
+                                            <button onClick={() => removeMCPServer(server.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
-                  </div>
+                )}
 
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-dark-100 mb-2 transition-colors duration-300">
-                      Version & Status
-                    </h3>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-1 bg-blue-100 dark:bg-dark-800 text-blue-700 dark:text-blue-300 text-xs rounded-full font-medium">
-                          v1.0.0-beta
-                        </span>
-                        <span className="px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-xs rounded-full font-medium">
-                          Development Phase
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 dark:text-dark-400">
-                        Built with Next.js 15, TypeScript, and Tailwind CSS
-                      </p>
+                {/* APPEARANCE TAB */}
+                {activeTab === 'appearance' && (
+                    <div className="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-5 space-y-3">
+                        <h2 className="text-sm font-semibold text-gray-900 dark:text-dark-100 mb-2">Appearance & UI</h2>
+                        {[
+                            { key: 'isDarkMode' as const, label: 'Dark Mode', desc: 'Use dark theme' },
+                            { key: 'showTokenCount' as const, label: 'Show Token Count', desc: 'Display token usage in header' },
+                            { key: 'showModelInfo' as const, label: 'Show Model Info', desc: 'Show model name on messages' },
+                        ].map(item => (
+                            <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-dark-800 rounded-lg">
+                                <div>
+                                    <p className="text-sm font-medium text-gray-700 dark:text-dark-200">{item.label}</p>
+                                    <p className="text-xs text-gray-500 dark:text-dark-400">{item.desc}</p>
+                                </div>
+                                <button onClick={() => updateLocal(item.key, !localSettings[item.key])} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${localSettings[item.key] ? 'bg-blue-600' : 'bg-gray-300 dark:bg-dark-600'}`}>
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${localSettings[item.key] ? 'translate-x-6' : 'translate-x-1'}`} />
+                                </button>
+                            </div>
+                        ))}
+                        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-dark-800 rounded-lg">
+                            <div>
+                                <p className="text-sm font-medium text-gray-700 dark:text-dark-200">Interface Language</p>
+                                <p className="text-xs text-gray-500 dark:text-dark-400">UI display language</p>
+                            </div>
+                            <select value={localSettings.language} onChange={(e) => updateLocal('language', e.target.value as 'en' | 'my')} className="px-3 py-1.5 border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-sm text-gray-900 dark:text-dark-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="en">English</option>
+                                <option value="my">မြန်မာ (Burmese)</option>
+                            </select>
+                        </div>
+                        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-dark-800 rounded-lg">
+                            <div>
+                                <p className="text-sm font-medium text-gray-700 dark:text-dark-200">Export Format</p>
+                                <p className="text-xs text-gray-500 dark:text-dark-400">Default format for chat exports</p>
+                            </div>
+                            <select value={localSettings.exportFormat} onChange={(e) => updateLocal('exportFormat', e.target.value as 'markdown' | 'json' | 'txt')} className="px-3 py-1.5 border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-sm text-gray-900 dark:text-dark-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="markdown">Markdown (.md)</option>
+                                <option value="json">JSON (.json)</option>
+                                <option value="txt">Plain Text (.txt)</option>
+                            </select>
+                        </div>
                     </div>
-                  </div>
+                )}
 
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-dark-100 mb-2 transition-colors duration-300">
-                      Features
-                    </h3>
-                    <ul className="text-sm text-gray-600 dark:text-dark-400 space-y-1">
-                      <li>• Multiple AI provider support (OpenRouter, Groq, Together AI)</li>
-                      <li>• Advanced reasoning capabilities</li>
-                      <li>• Vision analysis and image processing</li>
-                      <li>• Web search integration</li>
-                      <li>• Responsive dark/light themes</li>
-                      <li>• Local storage and privacy-focused</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
+                {/* ABOUT TAB */}
+                {activeTab === 'about' && (
+                    <div className="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-6 text-center">
+                        <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <Bot className="w-8 h-8 text-white" />
+                        </div>
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-dark-100">RavenGPT</h2>
+                        <p className="text-sm text-gray-500 dark:text-dark-400 mt-1">Version 2.0.0 — Enhanced Edition</p>
+                        <p className="text-sm text-gray-600 dark:text-dark-300 mt-3 max-w-md mx-auto">
+                            A powerful AI chat interface with multi-model support, MCP integration, tool calling, vision, reasoning, and Burmese language support.
+                        </p>
+                        <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-3 text-left">
+                            {[
+                                { icon: '🤖', title: 'Multi-Model', desc: 'OpenRouter, Groq, Together AI' },
+                                { icon: '🔧', title: 'Tool Calling', desc: '8 built-in tools' },
+                                { icon: '🔌', title: 'MCP Protocol', desc: 'External server integration' },
+                                { icon: '👁️', title: 'Vision', desc: 'Image analysis' },
+                                { icon: '🧠', title: 'Reasoning', desc: 'Deep thinking models' },
+                                { icon: '🌐', title: 'Web Search', desc: 'Real-time internet' },
+                                { icon: '💾', title: 'Export/Import', desc: 'Markdown, JSON, TXT' },
+                                { icon: '🇲🇲', title: 'Burmese', desc: 'မြန်မာဘာသာ support' },
+                                { icon: '⌨️', title: 'Shortcuts', desc: 'Full keyboard nav' },
+                            ].map((feature, i) => (
+                                <div key={i} className="p-3 bg-gray-50 dark:bg-dark-800 rounded-lg text-left">
+                                    <span className="text-lg">{feature.icon}</span>
+                                    <p className="text-sm font-medium text-gray-900 dark:text-dark-100 mt-1">{feature.title}</p>
+                                    <p className="text-xs text-gray-500 dark:text-dark-400">{feature.desc}</p>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mt-6 flex items-center justify-center gap-4">
+                            <a href="https://github.com/wh1sky02/RavenGPT" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors">
+                                <ExternalLink className="w-4 h-4" />GitHub
+                            </a>
+                            <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors">
+                                <ExternalLink className="w-4 h-4" />OpenRouter
+                            </a>
+                        </div>
+                    </div>
+                )}
             </div>
-
-            {/* Development Notice & Support */}
-            <div className="space-y-6">
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg shadow p-6 border border-yellow-200 dark:border-yellow-700">
-                <h2 className="text-lg font-semibold text-yellow-800 dark:text-yellow-200 mb-4">
-                  ⚠️ Development Notice
-                </h2>
-
-                <div className="space-y-4 text-sm text-yellow-700 dark:text-yellow-300">
-                  <div>
-                    <h4 className="font-medium mb-2">Current Status</h4>
-                    <p>
-                      This application is currently in the <strong>development phase</strong>.
-                      While we strive for stability and reliability, you may encounter:
-                    </p>
-                    <ul className="list-disc ml-5 mt-2 space-y-1">
-                      <li>Occasional bugs or unexpected behavior</li>
-                      <li>Features that are still being refined</li>
-                      <li>UI/UX improvements in progress</li>
-                      <li>API rate limiting or provider-specific issues</li>
-                    </ul>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium mb-2">What to Expect</h4>
-                    <ul className="list-disc ml-5 space-y-1">
-                      <li>Regular updates and improvements</li>
-                      <li>New features and capabilities</li>
-                      <li>Bug fixes and performance optimizations</li>
-                      <li>Enhanced user experience</li>
-                    </ul>
-                  </div>
-
-                  <div className="p-3 bg-yellow-100 dark:bg-yellow-900/40 rounded border border-yellow-300 dark:border-yellow-600">
-                    <strong>Tip:</strong> If you encounter any issues, try refreshing the page,
-                    checking your API key, or switching to a different AI provider in the settings.
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white dark:bg-dark-900 rounded-lg shadow p-6">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-100 mb-4">
-                  Technical Information
-                </h2>
-
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">Framework</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">Next.js 15</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">Language</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">TypeScript</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">Styling</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">Tailwind CSS</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">Icons</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">Lucide React</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">Storage</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-dark-100">Browser Local Storage</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600 dark:text-dark-400">Privacy</span>
-                    <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">100% Local</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-blue-50 dark:bg-dark-900 rounded-lg p-4 border border-blue-200 dark:border-dark-800">
-                <h4 className="text-sm font-medium text-blue-800 dark:text-dark-200 mb-2">
-                  🛡️ Privacy & Security
-                </h4>
-                <div className="text-xs text-blue-700 dark:text-dark-300 space-y-1">
-                  <div>• Your API keys are stored locally in your browser only</div>
-                  <div>• No data is sent to external servers except AI providers</div>
-                  <div>• Chat history is saved locally and never uploaded</div>
-                  <div>• Full control over your data and conversations</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-} 
+        </div>
+    );
+}
