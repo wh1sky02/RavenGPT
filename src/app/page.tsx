@@ -32,7 +32,7 @@ interface UploadedFile {
 
 export default function Home() {
     const router = useRouter();
-    const { settings, updateSetting, toggleDarkMode, updateMCPServer } = useSettings();
+    const { settings, updateSetting, toggleDarkMode, updateMCPServer, isLoaded: settingsLoaded } = useSettings();
 
     const {
         chatSessions,
@@ -62,6 +62,7 @@ export default function Home() {
     const [editingTitle, setEditingTitle] = useState('');
     const [tokenCount, setTokenCount] = useState(0);
     const [mcpTools, setMcpTools] = useState<MCPTool[]>([]);
+    const [mcpConnecting, setMcpConnecting] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -84,6 +85,38 @@ export default function Home() {
     }, []);
 
     useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
+
+    // Connect to enabled MCP servers when feature mode supports tools
+    useEffect(() => {
+        const enabledServers = settings.mcpServers.filter(
+            s => s.enabled && (s.transport === 'http' || s.transport === 'sse') && s.status !== 'connected'
+        );
+        if (enabledServers.length === 0 || !settings.apiKey) return;
+
+        setMcpConnecting(true);
+        const connectAll = async () => {
+            const allTools: MCPTool[] = [];
+            for (const server of enabledServers) {
+                try {
+                    updateMCPServer(server.id, { status: 'connecting' });
+                    const tools = await connectMCPServer(server);
+                    allTools.push(...tools);
+                    updateMCPServer(server.id, { status: 'connected', tools });
+                } catch (err) {
+                    updateMCPServer(server.id, {
+                        status: 'error',
+                        lastError: err instanceof Error ? err.message : 'Connection failed'
+                    });
+                }
+            }
+            setMcpTools(prev => {
+                const existing = prev.filter(t => !allTools.some(at => at.name === t.name && at.serverId === t.serverId));
+                return [...existing, ...allTools];
+            });
+            setMcpConnecting(false);
+        };
+        connectAll();
+    }, [settings.mcpServers, settings.apiKey, updateMCPServer]);
 
     // Load models
     useEffect(() => {
@@ -258,7 +291,8 @@ export default function Home() {
         );
 
         const apiUrl = settings.providerUrl || PROVIDER_URLS[settings.providerName] || PROVIDER_URLS['OpenRouter'];
-        const apiMessages = buildApiMessages(newMessages, currentChat?.systemPrompt);
+        const activeChat = chatSessions.find(s => s.id === activeChatId);
+        const apiMessages = buildApiMessages(newMessages, activeChat?.systemPrompt);
 
         let modelId = settings.selectedModel;
         if (featureMode === 'web-search' && settings.providerName === 'OpenRouter' && !modelId.endsWith(':online')) {
@@ -433,7 +467,7 @@ export default function Home() {
                     });
                 }
 
-                const followUpMessages = buildApiMessages(finalMessages, currentChat?.systemPrompt);
+                const followUpMessages = buildApiMessages(finalMessages, activeChat?.systemPrompt);
                 const followUpResponse = await fetch(apiUrl, {
                     method: 'POST',
                     headers: {
@@ -492,7 +526,7 @@ export default function Home() {
         }
     }, [
         input, uploadedFiles, settings, isLoading, currentChatId, featureMode,
-        chatSessions, models, mcpTools, currentChat,
+        chatSessions, models, mcpTools,
         handleCreateNewChat, buildApiMessages, generateTitle,
         updateChatMessages, handleToolCalls, router
     ]);
@@ -582,7 +616,7 @@ export default function Home() {
         if (currentChatId) updateChatSettings(currentChatId, { featureMode: mode });
     }, [currentChatId, updateChatSettings]);
 
-    if (!isInitialized) {
+    if (!isInitialized || !settingsLoaded) {
         return (
             <div className="h-screen flex items-center justify-center bg-white dark:bg-dark-950">
                 <div className="flex flex-col items-center gap-3">
@@ -647,7 +681,7 @@ export default function Home() {
                     setFeatureMode={handleFeatureModeChange}
                     selectedModel={settings.selectedModel}
                     models={models}
-                    hasMCPServers={settings.mcpServers.some(s => s.enabled && s.status === 'connected')}
+                    hasMCPServers={settings.mcpServers.some(s => s.enabled && (s.status === 'connected' || s.status === 'connecting'))}
                 />
 
                 <ChatArea

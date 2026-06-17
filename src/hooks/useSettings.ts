@@ -57,6 +57,14 @@ export function useSettings() {
             } catch (error) {
                 console.error('Error saving settings:', error);
             }
+            // Apply dark mode immediately when saved from settings
+            if ('isDarkMode' in newSettings) {
+                if (newSettings.isDarkMode) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            }
             return updated;
         });
     }, []);
@@ -141,6 +149,15 @@ export function useSettings() {
         window.addEventListener('storage', handleStorageChange);
         return () => window.removeEventListener('storage', handleStorageChange);
     }, [applyDarkMode]);
+
+    // Keep dark class in sync with settings after load
+    useEffect(() => {
+        if (isLoaded && settings.isDarkMode) {
+            document.documentElement.classList.add('dark');
+        } else if (isLoaded && !settings.isDarkMode) {
+            document.documentElement.classList.remove('dark');
+        }
+    }, [settings.isDarkMode, isLoaded]);
 
     return {
         settings,

@@ -31,8 +31,29 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var saved = localStorage.getItem('ravengpt-settings-v2');
+                  if (saved) {
+                    var settings = JSON.parse(saved);
+                    if (settings.isDarkMode) {
+                      document.documentElement.classList.add('dark');
+                    }
+                  } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    document.documentElement.classList.add('dark');
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-white dark:bg-dark-950 text-gray-900 dark:text-dark-100`}
         suppressHydrationWarning
       >
         {children}
